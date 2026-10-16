@@ -41,14 +41,29 @@ jobs:
             echo "exists=false" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Set up Python
+        if: steps.tag_check.outputs.exists == 'false'
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Generate class map
+        if: steps.tag_check.outputs.exists == 'false'
+        run: |
+          pip install pyyaml
+          python scripts/generate_class_map.py
+
       - name: Build repository archives
         if: steps.tag_check.outputs.exists == 'false'
         run: |
           name="polearms-${{ steps.version.outputs.version }}"
+          # Archive a tree that includes the regenerated class map (git archive HEAD would not).
+          git add mappings/class_map.yaml
+          tree="$(git write-tree)"
           mkdir -p dist
           for format in tar.gz zip; do
-            git archive --format="$format" --prefix="$name/" -o "dist/$name.$format" HEAD
-            git archive --format="$format" --prefix="$name/" -o "dist/$name-schemaless.$format" HEAD -- . ':(exclude)schema'
+            git archive --format="$format" --prefix="$name/" -o "dist/$name.$format" "$tree"
+            git archive --format="$format" --prefix="$name/" -o "dist/$name-schemaless.$format" "$tree" -- . ':(exclude)schema'
           done
 
       - name: Create tag and release
