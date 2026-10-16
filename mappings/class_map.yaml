@@ -1,0 +1,85 @@
+classes:
+  0: Base Event
+  1001: File System Activity
+  1002: Kernel Extension Activity
+  1003: Kernel Activity
+  1004: Memory Activity
+  1005: Module Activity
+  1006: Scheduled Job Activity
+  1007: Process Activity
+  1008: Event Log Activity
+  1009: Script Activity
+  1010: Peripheral Activity
+  2001: Security Finding
+  2002: Vulnerability Finding
+  2003: Compliance Finding
+  2004: Detection Finding
+  2005: Incident Finding
+  2006: Data Security Finding
+  2007: Application Security Posture Finding
+  2008: IAM Analysis Finding
+  3001: Account Change
+  3002: Authentication
+  3003: Authorize Session
+  3004: Entity Management
+  3005: User Access Management
+  3006: Group Management
+  4001: Network Activity
+  4002: HTTP Activity
+  4003: DNS Activity
+  4004: DHCP Activity
+  4005: RDP Activity
+  4006: SMB Activity
+  4007: SSH Activity
+  4008: FTP Activity
+  4009: Email Activity
+  4010: Network File Activity
+  4011: Email File Activity
+  4012: Email URL Activity
+  4013: NTP Activity
+  4014: Tunnel Activity
+  5001: Device Inventory Info
+  5002: Device Config State
+  5003: User Inventory Info
+  5004: Operating System Patch State
+  5006: Kernel Object Query
+  5007: File Query
+  5008: Folder Query
+  5009: Admin Group Query
+  5010: Job Query
+  5011: Module Query
+  5012: Network Connection Query
+  5013: Networks Query
+  5014: Peripheral Device Query
+  5015: Process Query
+  5016: Service Query
+  5017: User Session Query
+  5018: User Query
+  5019: Device Config State Change
+  5020: Software Inventory Info
+  5021: OSINT Inventory Info
+  5022: Startup Item Query
+  5023: Cloud Resources Inventory Info
+  5040: Live Evidence Info
+  6001: Web Resources Activity
+  6002: Application Lifecycle
+  6003: API Activity
+  6004: Web Resource Access Activity
+  6005: Datastore Activity
+  6006: File Hosting Activity
+  6007: Scan Activity
+  6008: Application Error
+  7001: Remediation Activity
+  7002: File Remediation Activity
+  7003: Process Remediation Activity
+  7004: Network Remediation Activity
+  8001: Drone Flights Activity
+  8002: Airborne Broadcast Activity
+  201001: Registry Key Activity
+  201002: Registry Value Activity
+  201003: Windows Resource Activity
+  201004: Windows Service Activity
+  205004: Registry Key Query
+  205005: Registry Value Query
+  205019: Prefetch Query
+  98500000: Vendor Overflow

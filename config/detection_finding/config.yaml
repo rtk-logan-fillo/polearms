@@ -1,0 +1,230 @@
+version: 1.0.0
+class: detection_finding
+class_uid: 2004
+essential_fields: []
+
+override_mappings:
+  - polearms: evidences[x].src_endpoint.ip
+    swords: c-ip
+    labels:
+      x: "index==0"
+    mapper:
+      fn: map_evidence_client_ip
+      args:
+        evidences: evidences
+
+  - polearms: evidences[x].src_endpoint.port
+    swords: c-port
+    labels:
+      x: "index==0"
+    mapper:
+      fn: map_evidence_client_port
+      args:
+        evidences: evidences
+
+  - polearms: evidences[x].dst_endpoint.ip
+    swords: s-ip
+    labels:
+      x: "index==0"
+    mapper:
+      fn: map_evidence_server_ip
+      args:
+        evidences: evidences
+
+  - polearms: evidences[x].src_endpoint.location.city
+    swords: cloud.client.geoip.city
+    labels:
+      x: "index==0"
+    mapper:
+      fn: map_evidence_geoip_city
+      args:
+        evidences: evidences
+
+  - polearms: evidences[x].src_endpoint.location.country
+    swords: cloud.client.geoip.country
+    labels:
+      x: "index==0"
+    mapper:
+      fn: map_evidence_geoip_country
+      args:
+        evidences: evidences
+
+  - polearms: evidences[x].src_endpoint.location.lat
+    swords: cloud.client.geoip.latitude
+    labels:
+      x: "index==0"
+    mapper:
+      fn: map_evidence_geoip_latitude
+      args:
+        evidences: evidences
+
+  - polearms: evidences[x].src_endpoint.location.long
+    swords: cloud.client.geoip.longitude
+    labels:
+      x: "index==0"
+    mapper:
+      fn: map_evidence_geoip_longitude
+      args:
+        evidences: evidences
+
+  - polearms: evidences[x].http_response.code
+    swords: http.status
+    labels:
+      x: "index==0"
+    mapper:
+      fn: map_evidence_http_status
+      args:
+        evidences: evidences
+
+  - polearms: evidences[x].http_request.http_method
+    swords: http.method
+    labels:
+      x: "index==0"
+    mapper:
+      fn: map_evidence_http_method
+      args:
+        evidences: evidences
+
+  - polearms: evidences[x].http_request.referrer
+    swords: http.referer
+    labels:
+      x: "index==0"
+    mapper:
+      fn: map_evidence_http_referer
+      args:
+        evidences: evidences
+
+  - polearms: evidences[x].http_request.url.url_string
+    swords: http.uri
+    labels:
+      x: "index==0"
+    mapper:
+      fn: map_evidence_http_uri
+      args:
+        evidences: evidences
+
+  - polearms: evidences[x].http_request.user_agent
+    swords: user-agent.raw
+    labels:
+      x: "index==0"
+    mapper:
+      fn: map_evidence_user_agent
+      args:
+        evidences: evidences
+
+  - polearms:
+      - evidences[x].src_endpoint.ip
+      - evidences[y].dst_endpoint.ip
+      - evidences[z].dst_endpoint.proxy_endpoint.ip
+    swords: related.ip
+    labels:
+      x: "index>0 && src_endpoint.ip != null"
+      y: "index>0 && dst_endpoint.ip != null"
+      z: "index>0 && dst_endpoint.proxy_endpoint.ip != null"
+    mapper:
+      fn: map_evidence_related_ip
+      args:
+        evidences: evidences
+
+  - polearms: evidences[x].tls.certificate.fingerprints[y].value
+    swords: threat.enrichments[].indicator.hash.md5
+    labels:
+      x: "tls.certificate.fingerprints!=null"
+      y: "algorithm_id==1"
+    mapper:
+      fn: map_evidence_hash_md5
+      args:
+        evidences: evidences
+
+  - polearms: evidences[x].tls.certificate.fingerprints[y].value
+    swords: threat.enrichments[].indicator.hash.sha1
+    labels:
+      x: "tls.certificate.fingerprints!=null"
+      y: "algorithm_id==2"
+    mapper:
+      fn: map_evidence_hash_sha1
+      args:
+        evidences: evidences
+
+  - polearms: evidences[x].tls.certificate.fingerprints[y].value
+    swords: threat.enrichments[].indicator.hash.sha256
+    labels:
+      x: "tls.certificate.fingerprints!=null"
+      y: "algorithm_id==3"
+    mapper:
+      fn: map_evidence_hash_sha256
+      args:
+        evidences: evidences
+
+  - polearms: evidences[x].dst_endpoint.hostname
+    swords: s-hostname
+    labels:
+      x: "index==0"
+    mapper:
+      fn: map_evidence_server_hostname
+      args:
+        evidences: evidences
+
+  - polearms: evidences[x].dst_endpoint.port
+    swords: s-port
+    labels:
+      x: "index==0"
+    mapper:
+      fn: map_evidence_server_port
+      args:
+        evidences: evidences
+
+  - polearms: evidences[x].http_request.length
+    swords: cs-bytes
+    labels:
+      x: "index==0"
+    mapper:
+      fn: map_evidence_request_length
+      args:
+        evidences: evidences
+
+  - polearms: evidences[x].http_request.url.scheme
+    swords: cs-scheme
+    labels:
+      x: "index==0"
+    mapper:
+      fn: map_evidence_request_scheme
+      args:
+        evidences: evidences
+
+  - polearms: evidences[x].http_request.uid
+    swords: http.request-id
+    labels:
+      x: "index==0"
+    mapper:
+      fn: map_evidence_request_uid
+      args:
+        evidences: evidences
+
+  - polearms: evidences[x].http_request.url.path
+    swords: cloud.resource.path
+    labels:
+      x: "index==0"
+    mapper:
+      fn: map_evidence_request_path
+      args:
+        evidences: evidences
+
+  - polearms: evidences[x].http_response.body_length
+    swords: sc-bytes
+    labels:
+      x: "index==0"
+    mapper:
+      fn: map_evidence_response_body_length
+      args:
+        evidences: evidences
+
+  - polearms: evidences[x].resources[y].hostname
+    swords: url.security_zone
+    labels:
+      x: "index==0"
+      y: "hostname!=null"
+    mapper:
+      fn: map_evidence_security_zone
+      args:
+        evidences: evidences

@@ -1,0 +1,224 @@
+version: "1.0.0"
+
+mappings:
+- polearms: arcticwolf.customer.uuid
+  swords: tenant.customer_uuid
+
+- polearms: arcticwolf.deployment.uuid
+  swords: tenant.deployment_id
+
+- polearms: arcticwolf.customer.id
+  swords: customer-id
+
+- polearms: arcticwolf.deployment.id
+  swords: deployment-id
+
+- polearms: device.type
+  swords: host.type
+
+- polearms: disposition
+  swords: firewall.action
+
+- polearms: activity_name
+  swords: event.name
+
+- polearms: actor.app_name
+  swords: cloud.client.application
+
+- polearms: actor.user.email_addr
+  swords: host.user.email
+
+- polearms: actor.user.name
+  swords: host.user.name
+
+- polearms: actor.user.uid
+  swords: host.user.id
+
+- polearms: actor.user.type
+  swords: cloud.client.delegated-user.type
+
+- polearms: arcticwolf.ingestion_service.endpoint.name
+  swords: cloud.service.endpoint
+
+- polearms: dst_endpoint.ip
+  swords: s-ip
+
+- polearms: firewall_rule.desc
+  swords: firewall.message
+
+- polearms: firewall_rule.match_location
+  swords: firewall.s-location
+
+- polearms: firewall_rule.name
+  swords: firewall.rule
+
+- polearms: firewall_rule.type
+  swords: firewall.rule-type
+
+- polearms: firewall_rule.uid
+  swords: log.rule-id
+
+- polearms: http_request.http_method
+  swords: http.method
+
+- polearms: http_request.uid
+  swords: http.request-id
+
+- polearms: http_request.url.path
+  swords: cloud.resource.path
+
+- polearms: http_request.user_agent
+  swords: user-agent.raw
+
+- polearms: http_response.code
+  swords: sc-status
+
+- polearms: message
+  swords: event.message
+
+- polearms: metadata.log_level
+  swords: log.log-level
+
+- polearms: metadata.log_name
+  swords: cloud.event.context
+
+- polearms: metadata.log_source
+  swords: event.module
+
+- polearms: metadata.source
+  swords: cloud.service.account.name
+
+- polearms: metadata.tenant_uid
+  swords: cloud.service.account.id
+
+- polearms: src_endpoint.ip
+  swords: c-ip
+
+- polearms: status
+  swords: threat.status
+
+- polearms: user.email_addr
+  swords: client.user.email
+
+- polearms: user.name
+  swords: cs-username
+
+- polearms: user.type
+  swords: cloud.client.user.type
+
+- polearms: user.uid
+  swords: cloud.client.user.id
+
+- polearms: user_result.name
+  swords: ad.event.target.changed-attributes.display-name
+
+- polearms: class_uid
+  swords: telemetry-types
+  mapper:
+    fn: map_telemetry_types
+
+- polearms: time
+  swords: "@timestamp"
+  mapper:
+    fn: map_time
+
+- polearms: severity_id
+  swords: threat.severity
+
+- polearms: attacks[x].tactic.uid
+  swords: threat.tactic.id
+  labels:
+    x: "tactic.uid!=null"
+  mapper:
+    fn: map_attack_tactic_id
+    args:
+      attacks: attacks
+
+- polearms: attacks[x].tactic.name
+  swords: threat.tactic.name
+  labels:
+    x: "tactic.name!=null"
+  mapper:
+    fn: map_attack_tactic_name
+    args:
+      attacks: attacks
+
+- polearms: attacks[x].tactic.src_url
+  swords: threat.tactic.reference
+  labels:
+    x: "tactic.src_url!=null"
+  mapper:
+    fn: map_attack_tactic_reference
+    args:
+      attacks: attacks
+    join: ","
+
+- polearms: attacks[x].technique.uid
+  swords: threat.technique.id
+  labels:
+    x: "technique.uid!=null"
+  mapper:
+    fn: map_attack_technique_id
+    args:
+      attacks: attacks
+    join: ","
+
+- polearms: attacks[x].technique.name
+  swords: threat.technique.name
+  labels:
+    x: "technique.name!=null"
+  mapper:
+    fn: map_attack_technique_name
+    args:
+      attacks: attacks
+
+- polearms: attacks[x].technique.src_url
+  swords: threat.technique.reference
+  labels:
+    x: "technique.src_url!=null"
+  mapper:
+    fn: map_attack_technique_reference
+    args:
+      attacks: attacks
+    join: ","
+
+- polearms: attacks[x].sub_technique.src_url
+  swords: threat.technique.subtechnique.reference
+  labels:
+    x: "sub_technique.src_url!=null"
+  mapper:
+    fn: map_attack_subtechnique_reference
+    args:
+      attacks: attacks
+    join: ","
+
+- polearms: activity_id
+  swords: event.id
+  mapper:
+    fn: map_activity_id
+
+# TODO: this seems broken
+# - polearms: malware
+#   swords: vulnerability.classification
+#   mapper:
+#     fn: map_malware_classifications
+
+- polearms: malware_scan_info.size
+  swords: threat.enrichments[].indicator.file.size
+  mapper:
+    fn: map_malware_scan_info_size
+
+- polearms: malware_scan_info.type
+  swords: threat.enrichments[].indicator.file.type
+  mapper:
+    fn: map_malware_scan_info_type
+
+- polearms: user_result.groups[x].uid
+  swords: ad.event.target.changed-attributes.primary-group-id
+  labels:
+    x: "uid!=null"
+  mapper:
+    fn: map_user_result_groups_uid
+    args:
+      user_result_groups: user_result.groups
+    join: ","

@@ -1,0 +1,65 @@
+name: Release
+
+on:
+  pull_request:
+    types: [closed]
+    branches: [main]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout merge commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.merge_commit_sha }}
+          fetch-depth: 0
+
+      - name: Read version
+        id: version
+        run: |
+          version="$(tr -d '[:space:]' < VERSION)"
+          if ! [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error file=VERSION::'$version' is not a valid semantic version"
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=v$version" >> "$GITHUB_OUTPUT"
+
+      - name: Check whether tag already exists
+        id: tag_check
+        run: |
+          if git ls-remote --exit-code --tags origin "refs/tags/${{ steps.version.outputs.tag }}" > /dev/null; then
+            echo "::warning::Tag ${{ steps.version.outputs.tag }} already exists; bump VERSION to publish a new release."
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build repository archives
+        if: steps.tag_check.outputs.exists == 'false'
+        run: |
+          name="polearms-${{ steps.version.outputs.version }}"
+          mkdir -p dist
+          for format in tar.gz zip; do
+            git archive --format="$format" --prefix="$name/" -o "dist/$name.$format" HEAD
+            git archive --format="$format" --prefix="$name/" -o "dist/$name-schemaless.$format" HEAD -- . ':(exclude)schema'
+          done
+
+      - name: Create tag and release
+        if: steps.tag_check.outputs.exists == 'false'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${{ steps.version.outputs.tag }}" dist/* \
+            --target "${{ github.event.pull_request.merge_commit_sha }}" \
+            --title "${{ steps.version.outputs.tag }}" \
+            --generate-notes
