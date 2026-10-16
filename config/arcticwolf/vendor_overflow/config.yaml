@@ -1,4 +1,3 @@
-version: 1.0.0
 class: arcticwolf/vendor_overflow
 class_uid: 98500000
 essential_fields_only: true

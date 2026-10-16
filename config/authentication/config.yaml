@@ -1,4 +1,3 @@
-version: 1.0.0
 class: authentication
 class_uid: 3002
 essential_fields: []

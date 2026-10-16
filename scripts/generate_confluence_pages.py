@@ -7,7 +7,7 @@ For every class config under config/ this builds two pages, in Confluence storag
     <Class> <version> - Essential Fields  the class's essential fields, with schema info
 
 and creates or updates them in Confluence, under POLEARMS / <version> / <Class> <version> in the
-personal space of the given user.
+personal space of the given user. <version> is the contents of the VERSION file.
 
 Usage:
     python3 scripts/generate_confluence_pages.py --confluence-user USER --confluence-token TOKEN
@@ -29,6 +29,7 @@ from pathlib import Path
 import yaml
 
 ROOT = Path(__file__).resolve().parent.parent
+VERSION_PATH = ROOT / "VERSION"
 CONFIG_DIR = ROOT / "config"
 MAPPINGS_PATH = ROOT / "mappings" / "mappings.yaml"
 SCHEMA_PATH = ROOT / "schema" / "schema.json"
@@ -107,7 +108,6 @@ class Mapping:
 
 @dataclass
 class ClassConfig:
-    version: str
     name: str
     essential_fields_only: bool
     essential_fields: list[dict]
@@ -117,7 +117,6 @@ class ClassConfig:
     def load(cls, path: Path) -> ClassConfig:
         raw = yaml.safe_load(path.read_text()) or {}
         return cls(
-            version=str(raw.get("version", "")),
             name=raw.get("class", ""),
             essential_fields_only=bool(raw.get("essential_fields_only", False)),
             essential_fields=list(raw.get("essential_fields") or []),
@@ -134,9 +133,16 @@ class ClassConfig:
         return False
 
 
-def load_mappings(path: Path) -> tuple[str, list[Mapping]]:
+def load_mappings(path: Path) -> list[Mapping]:
     raw = yaml.safe_load(path.read_text()) or {}
-    return str(raw.get("version", "")), [Mapping.from_dict(m) for m in raw.get("mappings") or []]
+    return [Mapping.from_dict(m) for m in raw.get("mappings") or []]
+
+
+def load_version(path: Path) -> str:
+    version = path.read_text().strip()
+    if not version:
+        raise SystemExit(f"{path} is empty")
+    return version
 
 
 class OCSFSchema:
@@ -357,14 +363,15 @@ def build_essential_fields_table(fields: list[dict], schema: OCSFSchema, class_n
 
 
 def build_pages(
+    version: str,
     config: ClassConfig,
     global_mappings: list[Mapping],
     schema: OCSFSchema,
     swords_schema: dict,
 ) -> list[Page]:
     class_info = schema.lookup_class(config.name)
-    class_title = f"{class_info['caption']} {config.version}"
-    hierarchy = [ROOT_PAGE_TITLE, config.version, class_title]
+    class_title = f"{class_info['caption']} {version}"
+    hierarchy = [ROOT_PAGE_TITLE, version, class_title]
     description = f"<p>{class_info['description']}</p>" if class_info.get("description") else ""
 
     mappings, overrides = global_mappings, config.override_mappings
@@ -505,7 +512,8 @@ def main() -> None:
     parser.add_argument("--confluence-token", required=True, help="Confluence API token")
     args = parser.parse_args()
 
-    mappings_version, global_mappings = load_mappings(MAPPINGS_PATH)
+    version = load_version(VERSION_PATH)
+    global_mappings = load_mappings(MAPPINGS_PATH)
     schema = OCSFSchema.load(SCHEMA_PATH)
     swords_schema = load_swords_schema(SWORDS_SCHEMA_PATH)
 
@@ -515,10 +523,7 @@ def main() -> None:
 
     pages: list[Page] = []
     for config in configs:
-        if config.version != mappings_version:
-            print(f"warning: {config.name} is version {config.version} but {MAPPINGS_PATH.name} "
-                  f"is version {mappings_version}", file=sys.stderr)
-        pages.extend(build_pages(config, global_mappings, schema, swords_schema))
+        pages.extend(build_pages(version, config, global_mappings, schema, swords_schema))
 
     client = ConfluenceClient(CONFLUENCE_URL, args.confluence_user, args.confluence_token)
     publish_pages(pages, client)

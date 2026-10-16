@@ -1,4 +1,3 @@
-version: 1.0.0
 class: account_change
 class_uid: 3001
 essential_fields: []

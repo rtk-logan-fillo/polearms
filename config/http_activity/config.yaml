@@ -1,4 +1,3 @@
-version: 1.0.0
 class: http_activity
 class_uid: 4002
 essential_fields:

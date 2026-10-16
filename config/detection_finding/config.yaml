@@ -1,4 +1,3 @@
-version: 1.0.0
 class: detection_finding
 class_uid: 2004
 essential_fields: []
