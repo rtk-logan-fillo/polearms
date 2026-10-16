@@ -23,3 +23,6 @@ htmlcov/
 .idea/
 *.swp
 .DS_Store
+
+# Generated output
+build/

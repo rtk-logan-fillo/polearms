@@ -47,11 +47,27 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Generate class map
+      - name: Create virtualenv
         if: steps.tag_check.outputs.exists == 'false'
         run: |
-          pip install pyyaml
-          python scripts/generate_class_map.py
+          python -m venv .venv
+          .venv/bin/pip install --upgrade pip
+          .venv/bin/pip install -r requirements.txt
+          echo "$GITHUB_WORKSPACE/.venv/bin" >> "$GITHUB_PATH"
+
+      - name: Generate class map
+        if: steps.tag_check.outputs.exists == 'false'
+        run: python scripts/generate_class_map.py
+
+      - name: Publish Confluence pages
+        if: steps.tag_check.outputs.exists == 'false'
+        env:
+          CONFLUENCE_USER: ${{ secrets.CONFLUENCE_USER }}
+          CONFLUENCE_TOKEN: ${{ secrets.CONFLUENCE_TOKEN }}
+        run: |
+          python scripts/generate_confluence_pages.py \
+            --confluence-user "$CONFLUENCE_USER" \
+            --confluence-token "$CONFLUENCE_TOKEN"
 
       - name: Build repository archives
         if: steps.tag_check.outputs.exists == 'false'
