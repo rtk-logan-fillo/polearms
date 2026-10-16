@@ -18,21 +18,28 @@ from __future__ import annotations
 import argparse
 import base64
 import json
-import re
 import sys
 import urllib.error
 import urllib.parse
 import urllib.request
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 
-import yaml
+from polearms_common import (
+    CONFIG_DIR,
+    MAPPINGS_PATH,
+    SCHEMA_PATH,
+    VERSION_PATH,
+    ClassConfig,
+    Mapping,
+    OCSFSchema,
+    base_path,
+    discover_class_configs,
+    display_path,
+    load_mappings,
+    load_version,
+)
 
-ROOT = Path(__file__).resolve().parent.parent
-VERSION_PATH = ROOT / "VERSION"
-CONFIG_DIR = ROOT / "config"
-MAPPINGS_PATH = ROOT / "mappings" / "mappings.yaml"
-SCHEMA_PATH = ROOT / "schema" / "schema.json"
 SWORDS_SCHEMA_PATH = Path(
     "/workspaces/parse_and_detect/rules/carsers/schemas/carser_swords_schema.json"
 )
@@ -45,21 +52,6 @@ ROOT_PAGE_TITLE = "POLEARMS"
 # Path helpers
 # ---------------------------------------------------------------------------
 
-_BRACKET = re.compile(r"\[[^\]]*\]")
-
-
-def base_path(path: str) -> str:
-    """Strip every [key] segment: 'attacks[x].tactic.uid' -> 'attacks.tactic.uid'."""
-    return _BRACKET.sub("", path)
-
-
-def display_path(path: str, labels: dict[str, str]) -> str:
-    """Replace [key] tokens with their label values: 'attacks[x].uid' -> 'attacks[uid!=null].uid'."""
-    for key, label in labels.items():
-        path = path.replace(f"[{key}]", f"[{label}]")
-    return path
-
-
 def escape_html(text: str) -> str:
     return (
         text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
@@ -67,116 +59,8 @@ def escape_html(text: str) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Config, mappings and schemas
+# SWORDS schema
 # ---------------------------------------------------------------------------
-
-
-@dataclass
-class Mapping:
-    polearms: list[str]
-    swords: str
-    labels: dict[str, str] = field(default_factory=dict)
-    mapper: dict | None = None
-
-    @classmethod
-    def from_dict(cls, raw: dict) -> Mapping:
-        polearms = raw.get("polearms") or []
-        if isinstance(polearms, str):
-            polearms = [polearms]
-        return cls(
-            polearms=list(polearms),
-            swords=raw.get("swords") or "",
-            labels=dict(raw.get("labels") or {}),
-            mapper=raw.get("mapper"),
-        )
-
-    def has_polearms(self) -> bool:
-        return any(self.polearms)
-
-    def is_many_to_one(self) -> bool:
-        return len(self.polearms) > 1
-
-    def display_swords(self) -> str:
-        return display_path(self.swords, self.labels)
-
-    def swords_field_path(self) -> str:
-        return base_path(self.swords)
-
-    def join_separator(self) -> str | None:
-        return (self.mapper or {}).get("join")
-
-
-@dataclass
-class ClassConfig:
-    name: str
-    essential_fields_only: bool
-    essential_fields: list[dict]
-    override_mappings: list[Mapping]
-
-    @classmethod
-    def load(cls, path: Path) -> ClassConfig:
-        raw = yaml.safe_load(path.read_text()) or {}
-        return cls(
-            name=raw.get("class", ""),
-            essential_fields_only=bool(raw.get("essential_fields_only", False)),
-            essential_fields=list(raw.get("essential_fields") or []),
-            override_mappings=[Mapping.from_dict(m) for m in raw.get("override_mappings") or []],
-        )
-
-    def covers_path(self, path: str) -> bool:
-        """Whether path is an essential field or lies under one. [key] segments are ignored."""
-        p = base_path(path)
-        for f in self.essential_fields:
-            e = base_path(f["polearms"])
-            if p == e or p.startswith(e + "."):
-                return True
-        return False
-
-
-def load_mappings(path: Path) -> list[Mapping]:
-    raw = yaml.safe_load(path.read_text()) or {}
-    return [Mapping.from_dict(m) for m in raw.get("mappings") or []]
-
-
-def load_version(path: Path) -> str:
-    version = path.read_text().strip()
-    if not version:
-        raise SystemExit(f"{path} is empty")
-    return version
-
-
-class OCSFSchema:
-    def __init__(self, data: dict):
-        self.classes = data["classes"]
-        self.objects = data["objects"]
-
-    @classmethod
-    def load(cls, path: Path) -> OCSFSchema:
-        with open(path) as handle:
-            return cls(json.load(handle))
-
-    def lookup_class(self, class_name: str) -> dict:
-        if class_name not in self.classes:
-            raise SystemExit(f"class {class_name!r} not found in schema")
-        return self.classes[class_name]
-
-    def lookup_field(self, class_name: str, dot_path: str) -> dict | None:
-        cls = self.classes.get(class_name)
-        if cls is None:
-            return None
-        attrs = cls["attributes"]
-        parts = dot_path.split(".")
-        for i, part in enumerate(parts):
-            attr = attrs.get(part.split("[", 1)[0])
-            if attr is None:
-                return None
-            if i == len(parts) - 1:
-                return attr
-            obj = self.objects.get(attr.get("object_type", ""))
-            if obj is None:
-                return None
-            attrs = obj["attributes"]
-        return None
 
 
 def load_swords_schema(path: Path) -> dict:
@@ -186,10 +70,6 @@ def load_swords_schema(path: Path) -> dict:
         return {}
     with open(path) as handle:
         return json.load(handle)
-
-
-def discover_class_configs(config_dir: Path) -> list[Path]:
-    return sorted(config_dir.rglob("config.yaml"))
 
 
 # ---------------------------------------------------------------------------

@@ -1,4 +1,4 @@
-class: detection_finding
+class_name: detection_finding
 class_uid: 2004
 essential_fields: []
 

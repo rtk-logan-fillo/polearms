@@ -1,4 +1,4 @@
-class: http_activity
+class_name: http_activity
 class_uid: 4002
 essential_fields:
   - polearms: http_request.http_headers
