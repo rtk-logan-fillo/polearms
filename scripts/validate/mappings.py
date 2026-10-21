@@ -6,7 +6,9 @@ classes. Each class's override_mappings (config/**/config.yaml) are validated ag
 with the global mappings as context for the override checks.
 
 Steps, by ID:
-    format                  structure of each mapping
+    json-schema             the YAML matches its JSON Schema (scripts/validate/schemas/)
+    labels                  every [key] in a path has a labels entry, and every label is used
+    mapper-function         the mapper function exists in complex_mappings.py
     valid-polearms-field    the POLEARMS field exists in the schema
     unique-polearms-field   no (POLEARMS base path, mapper) pair appears twice
     unique-swords-field     no SWORDS field appears twice
@@ -20,18 +22,18 @@ here.
 Exits 1 if there are any errors; warnings alone do not fail the run.
 
 Usage:
-    python3 scripts/validate_mappings.py
+    python3 -m scripts.validate.mappings
 """
 
 from __future__ import annotations
 
 import argparse
 import ast
-import sys
-from dataclasses import dataclass
 from pathlib import Path
 
-from polearms_common import (
+import yaml
+
+from scripts.common import (
     COMPLEX_MAPPINGS_PATH,
     CONFIG_DIR,
     MAPPINGS_PATH,
@@ -44,33 +46,25 @@ from polearms_common import (
     load_mappings,
     load_version,
 )
+from scripts.validate.helpers import (  # noqa: F401  (re-exported for callers and tests)
+    SEVERITY_ERROR,
+    SEVERITY_WARNING,
+    Issue,
+    error,
+    exit_if_errors,
+    report,
+    validate_against_schema,
+    warning,
+)
 
-SEVERITY_ERROR = "error"
-SEVERITY_WARNING = "warning"
-
-STEP_FORMAT = "format"
+STEP_LABELS = "labels"
+STEP_MAPPER_FUNCTION = "mapper-function"
 STEP_VALID_POLEARMS_FIELD = "valid-polearms-field"
 STEP_UNIQUE_POLEARMS_FIELD = "unique-polearms-field"
 STEP_UNIQUE_SWORDS_FIELD = "unique-swords-field"
 STEP_OVERRIDE_RELEVANCE = "override-relevance"
 STEP_OVERRIDE_COMPLETENESS = "override-completeness"
 STEP_OVERRIDE_SHADOWING = "override-shadowing"
-
-
-@dataclass(frozen=True)
-class Issue:
-    target: str
-    step: str
-    severity: str
-    message: str
-
-
-def error(target: str, step: str, message: str) -> Issue:
-    return Issue(target, step, SEVERITY_ERROR, message)
-
-
-def warning(target: str, step: str, message: str) -> Issue:
-    return Issue(target, step, SEVERITY_WARNING, message)
 
 
 def load_mapper_function_names(path: Path) -> set[str]:
@@ -85,40 +79,27 @@ def load_mapper_function_names(path: Path) -> set[str]:
 
 
 def validate_single_mapping(m: Mapping, mapper_fns: set[str]) -> list[Issue]:
-    """Structural checks on one mapping (the "format" step)."""
+    """The checks on one mapping that a JSON Schema can't express: its labels and mapper function.
+
+    The structure itself (required keys, types, mapper rules) is the "json-schema" step.
+    """
     key = m.display_name()
     issues: list[Issue] = []
-
-    def bad(message: str) -> None:
-        issues.append(error(key, STEP_FORMAT, message))
-
-    if not m.has_polearms():
-        bad("has empty polearms field")
-    elif len(m.base_paths()) != len(m.polearms):
-        bad("polearms list contains an empty path")
-
-    if m.is_many_to_one() and m.mapper is None:
-        bad("many-to-one polearms paths require a mapper")
-    if m.is_list_item() and m.mapper is None:
-        bad("swords list item paths require a mapper")
-
-    if m.swords == "":
-        bad("has empty swords field")
 
     path_keys = m.label_keys()
     for k in sorted(path_keys):
         if not m.labels.get(k):
-            bad(f"path has [{k}] but labels entry is missing or empty")
+            issues.append(error(key, STEP_LABELS, f"path has [{k}] but labels entry is missing or empty"))
     for k in sorted(m.labels):
         if k not in path_keys:
-            bad(f"label key {k!r} has no corresponding [{k}] in any polearms or swords path")
-
-    if m.mapper is not None and m.mapper.get("join") is not None and m.is_list_item():
-        bad("mapper join produces a string, but the swords path is a list item")
+            issues.append(error(
+                key, STEP_LABELS,
+                f"label key {k!r} has no corresponding [{k}] in any polearms or swords path"))
 
     fn = m.mapper_fn()
     if fn and mapper_fns and fn not in mapper_fns:
-        bad(f"mapper function {fn!r} not defined in complex_mappings.py")
+        issues.append(error(
+            key, STEP_MAPPER_FUNCTION, f"mapper function {fn!r} not defined in complex_mappings.py"))
 
     return issues
 
@@ -272,13 +253,8 @@ def validate_class_overrides(
     return issues
 
 
-def report(title: str, issues: list[Issue]) -> None:
-    errors = sum(1 for i in issues if i.severity == SEVERITY_ERROR)
-    warnings = len(issues) - errors
-    status = "ok" if not issues else f"{errors} error(s), {warnings} warning(s)"
-    print(f"{title}: {status}")
-    for i in issues:
-        print(f"  {i.severity.upper():7} [{i.step}] {i.target}: {i.message}")
+def load_yaml(path: Path) -> object:
+    return yaml.safe_load(path.read_text())
 
 
 def main() -> None:
@@ -287,20 +263,42 @@ def main() -> None:
 
     schema = OCSFSchema.load(SCHEMA_PATH)
     mapper_fns = load_mapper_function_names(COMPLEX_MAPPINGS_PATH)
-    globals_ = load_mappings(MAPPINGS_PATH)
     version = load_version(VERSION_PATH)
 
-    all_issues = validate_global_mappings(globals_, schema, mapper_fns, version)
-    report("global mappings", all_issues)
+    # A document that doesn't match its JSON Schema can't be safely turned into Mappings, so its
+    # structural errors are reported and the semantic checks are skipped for it.
+    issues = validate_against_schema(load_yaml(MAPPINGS_PATH), "mappings.schema.json", MAPPINGS_PATH.name)
+    globals_ = [] if issues else load_mappings(MAPPINGS_PATH)
+    if not issues:
+        issues = validate_global_mappings(globals_, schema, mapper_fns, version)
+    report("global mappings", issues)
+    all_issues = list(issues)
+    globals_usable = not issues
 
     for path in discover_class_configs(CONFIG_DIR):
-        config = ClassConfig.load(path)
-        issues = validate_class_overrides(config, globals_, schema, mapper_fns, version)
-        report(f"{config.name} override mappings", issues)
+        raw = load_yaml(path)
+        name = raw.get("class_name") if isinstance(raw, dict) else None
+        title = f"{name or path.parent.relative_to(CONFIG_DIR)} override mappings"
+
+        # Only the overrides are this validator's concern; the rest of the config is validate.config.
+        overrides = raw.get("override_mappings") if isinstance(raw, dict) else None
+        if not overrides:
+            report(title, [])
+            continue
+        issues = validate_against_schema(
+            {"mappings": overrides}, "mappings.schema.json", f"{path.parent.name}/config.yaml:override_mappings")
+        if not issues and name:
+            if globals_usable:
+                config = ClassConfig.load(path)
+                issues = validate_class_overrides(config, globals_, schema, mapper_fns, version)
+            else:
+                # The override checks compare against the global mappings, which failed above.
+                print(f"{title}: skipped (global mappings are invalid)")
+                continue
+        report(title, issues)
         all_issues += issues
 
-    if any(i.severity == SEVERITY_ERROR for i in all_issues):
-        sys.exit(1)
+    exit_if_errors(all_issues)
 
 
 if __name__ == "__main__":

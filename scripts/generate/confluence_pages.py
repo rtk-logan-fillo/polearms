@@ -10,7 +10,7 @@ and creates or updates them in Confluence, under POLEARMS / <version> / <Class> 
 personal space of the given user. <version> is the contents of the VERSION file.
 
 Usage:
-    python3 scripts/generate_confluence_pages.py --confluence-user USER --confluence-token TOKEN
+    python3 -m scripts.generate.confluence_pages --confluence-user USER --confluence-token TOKEN
 """
 
 from __future__ import annotations
@@ -25,7 +25,7 @@ import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
 
-from polearms_common import (
+from scripts.common import (
     CONFIG_DIR,
     MAPPINGS_PATH,
     SCHEMA_PATH,

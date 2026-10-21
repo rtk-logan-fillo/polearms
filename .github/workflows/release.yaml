@@ -61,7 +61,7 @@ jobs:
 
       - name: Generate class map
         if: steps.tag_check.outputs.exists == 'false'
-        run: python scripts/generate_class_map.py
+        run: python -m scripts.generate.class_map
 
       - name: Publish Confluence pages
         if: steps.tag_check.outputs.exists == 'false'
@@ -69,7 +69,7 @@ jobs:
           CONFLUENCE_USER: ${{ secrets.CONFLUENCE_USER }}
           CONFLUENCE_TOKEN: ${{ secrets.CONFLUENCE_TOKEN }}
         run: |
-          python scripts/generate_confluence_pages.py \
+          python -m scripts.generate.confluence_pages \
             --confluence-user "$CONFLUENCE_USER" \
             --confluence-token "$CONFLUENCE_TOKEN"
 

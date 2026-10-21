@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "schema_definition.schema.json",
+  "title": "schema_definition.yaml",
+  "description": "The versions of the OCSF schema and the Arctic Wolf extension that schema.json is built from.",
+  "type": "object",
+  "required": [
+    "ocsf",
+    "arcticwolf_extension"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "ocsf": {
+      "$ref": "#/$defs/versioned"
+    },
+    "arcticwolf_extension": {
+      "$ref": "#/$defs/versioned"
+    }
+  },
+  "$defs": {
+    "versioned": {
+      "type": "object",
+      "required": [
+        "version"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "version": {
+          "description": "a semantic version such as 1.0.0, quoted so YAML keeps it a string",
+          "type": "string",
+          "pattern": "^\\d+\\.\\d+\\.\\d+(-[0-9A-Za-z.-]+)?(\\+[0-9A-Za-z.-]+)?$"
+        }
+      }
+    }
+  }
+}

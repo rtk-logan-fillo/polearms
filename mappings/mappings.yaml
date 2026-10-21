@@ -1,5 +1,3 @@
-version: "1.0.0"
-
 mappings:
 - polearms: arcticwolf.customer.uuid
   swords: tenant.customer_uuid

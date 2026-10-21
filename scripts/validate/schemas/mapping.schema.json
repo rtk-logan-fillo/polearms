@@ -1,0 +1,134 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "mapping.schema.json",
+  "title": "Mapping",
+  "description": "One POLEARMS to SWORDS mapping. Shared by mappings.yaml and a class config's override_mappings.",
+  "type": "object",
+  "required": [
+    "polearms",
+    "swords"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "polearms": {
+      "description": "One POLEARMS path, or several for a many-to-one mapping whose mapper combines them.",
+      "type": [
+        "string",
+        "array"
+      ],
+      "minLength": 1,
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "swords": {
+      "description": "The SWORDS field this mapping writes.",
+      "type": "string",
+      "minLength": 1
+    },
+    "labels": {
+      "description": "A condition for each [key] used in the polearms or swords paths.",
+      "type": "object",
+      "additionalProperties": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "mapper": {
+      "$ref": "#/$defs/mapper"
+    }
+  },
+  "allOf": [
+    {
+      "description": "A many-to-one mapping needs a mapper to combine its inputs.",
+      "if": {
+        "properties": {
+          "polearms": {
+            "type": "array",
+            "minItems": 2
+          }
+        },
+        "required": [
+          "polearms"
+        ]
+      },
+      "then": {
+        "required": [
+          "mapper"
+        ]
+      }
+    },
+    {
+      "description": "A swords path into a list item ([] segment) needs a mapper.",
+      "if": {
+        "properties": {
+          "swords": {
+            "pattern": "\\["
+          }
+        },
+        "required": [
+          "swords"
+        ]
+      },
+      "then": {
+        "required": [
+          "mapper"
+        ]
+      }
+    },
+    {
+      "description": "join produces a string, so it cannot target a list item.",
+      "if": {
+        "properties": {
+          "swords": {
+            "pattern": "\\["
+          }
+        },
+        "required": [
+          "swords"
+        ]
+      },
+      "then": {
+        "properties": {
+          "mapper": {
+            "not": {
+              "required": [
+                "join"
+              ]
+            }
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "mapper": {
+      "type": "object",
+      "required": [
+        "fn"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "fn": {
+          "description": "Name of a function in complex_mappings.py.",
+          "type": "string",
+          "minLength": 1
+        },
+        "args": {
+          "description": "Maps each function argument name to a POLEARMS path.",
+          "type": "object",
+          "additionalProperties": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "join": {
+          "description": "Join the function's list result into one string with this separator.",
+          "type": "string"
+        }
+      }
+    }
+  }
+}

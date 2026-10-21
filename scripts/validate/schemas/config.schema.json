@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "config.schema.json",
+  "title": "Class config.yaml",
+  "description": "Configuration for one OCSF class.",
+  "type": "object",
+  "required": ["class_name", "class_uid"],
+  "additionalProperties": false,
+  "properties": {
+    "class_name": {
+      "description": "The class's key in schema.json, e.g. detection_finding or arcticwolf/vendor_overflow.",
+      "type": "string",
+      "minLength": 1
+    },
+    "class_uid": {
+      "description": "The class's uid in schema.json.",
+      "type": "integer",
+      "minimum": 0
+    },
+    "essential_fields_only": {
+      "description": "Only the essential fields are valid for the class.",
+      "type": "boolean"
+    },
+    "essential_fields": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["polearms"],
+        "additionalProperties": false,
+        "properties": {
+          "polearms": { "type": "string", "minLength": 1 },
+          "expected": {
+            "description": "Test data samples missing this field produce a warning.",
+            "type": "boolean"
+          }
+        }
+      }
+    },
+    "override_mappings": {
+      "description": "Mappings that replace the global ones for this class.",
+      "type": "array",
+      "items": { "$ref": "mapping.schema.json" }
+    }
+  }
+}

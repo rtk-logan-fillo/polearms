@@ -14,7 +14,9 @@ VERSION_PATH = ROOT / "VERSION"
 CONFIG_DIR = ROOT / "config"
 MAPPINGS_PATH = ROOT / "mappings" / "mappings.yaml"
 SCHEMA_PATH = ROOT / "schema" / "schema.json"
+SCHEMA_DEFINITION_PATH = ROOT / "schema" / "schema_definition.yaml"
 COMPLEX_MAPPINGS_PATH = ROOT / "mappings" / "complex_mappings.py"
+CLASS_MAP_PATH = ROOT / "mappings" / "class_map.yaml"
 
 
 _BRACKET = re.compile(r"\[[^\]]*\]")
@@ -39,18 +41,22 @@ def display_path(path: str, labels: dict[str, str]) -> str:
 
 @dataclass
 class Mapping:
-    polearms: list[str]
+    # In YAML, polearms is either one path or a list of paths; a single path is stored as a list.
+    polearms: list[str] | str
     swords: str
     labels: dict[str, str] = field(default_factory=dict)
     mapper: dict | None = None
 
+    def __post_init__(self):
+        if isinstance(self.polearms, str):
+            self.polearms = [self.polearms] if self.polearms else []
+        else:
+            self.polearms = list(self.polearms or [])
+
     @classmethod
     def from_dict(cls, raw: dict) -> Mapping:
-        polearms = raw.get("polearms") or []
-        if isinstance(polearms, str):
-            polearms = [polearms]
         return cls(
-            polearms=list(polearms),
+            polearms=raw.get("polearms") or [],
             swords=raw.get("swords") or "",
             labels=dict(raw.get("labels") or {}),
             mapper=raw.get("mapper"),
@@ -121,6 +127,16 @@ class ClassConfig:
 def load_mappings(path: Path) -> list[Mapping]:
     raw = yaml.safe_load(path.read_text()) or {}
     return [Mapping.from_dict(m) for m in raw.get("mappings") or []]
+
+
+def load_definition(path: Path) -> dict:
+    return yaml.safe_load(path.read_text()) or {}
+
+
+def definition_version(definition: dict, section: str) -> str | None:
+    """definition[section]['version'] as a string, or None if it is not set."""
+    value = (definition.get(section) or {}).get("version")
+    return None if value is None else str(value)
 
 
 def load_version(path: Path) -> str:

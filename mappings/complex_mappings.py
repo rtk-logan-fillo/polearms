@@ -8,6 +8,10 @@ DATETIME_FORMAT = "%Y-%m-%dT%H:%M:%S"
 
 FINGERPRINT_ALGORITHMS = {1: "md5", 2: "sha1", 3: "sha256"}
 
+CLASS_MAP_PATH = Path(__file__).resolve().parent / "class_map.yaml"
+with open(CLASS_MAP_PATH) as _class_map_file:
+    TELEMETRY_TYPES = yaml.safe_load(_class_map_file)["classes"]
+
 
 def _get(obj, path):
     for part in path.split("."):
@@ -32,10 +36,14 @@ def _attack_values(attacks, path):
     return values
 
 
-CLASS_MAP_PATH = Path(__file__).resolve().parent / "class_map.yaml"
-
-with open(CLASS_MAP_PATH) as _class_map_file:
-    TELEMETRY_TYPES = yaml.safe_load(_class_map_file)["classes"]
+def _hash_enrichments(evidences, algorithm_id):
+    enrichments = []
+    for evidence in evidences:
+        for fingerprint in _get(evidence, "tls.certificate.fingerprints") or []:
+            if fingerprint.get("algorithm_id") == algorithm_id:
+                algorithm = FINGERPRINT_ALGORITHMS[algorithm_id]
+                enrichments.append({"indicator": {"hash": {algorithm: fingerprint["value"]}}})
+    return enrichments or None
 
 
 def map_telemetry_types(class_uid):
@@ -190,16 +198,6 @@ def map_evidence_related_ip(evidences):
         if proxy_ip is not None:
             related.append(proxy_ip)
     return related or None
-
-
-def _hash_enrichments(evidences, algorithm_id):
-    enrichments = []
-    for evidence in evidences:
-        for fingerprint in _get(evidence, "tls.certificate.fingerprints") or []:
-            if fingerprint.get("algorithm_id") == algorithm_id:
-                algorithm = FINGERPRINT_ALGORITHMS[algorithm_id]
-                enrichments.append({"indicator": {"hash": {algorithm: fingerprint["value"]}}})
-    return enrichments or None
 
 
 def map_evidence_hash_md5(evidences):
