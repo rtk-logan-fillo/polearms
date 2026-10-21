@@ -1,23 +1,14 @@
 name: Validate
 
-# Runs on PRs directly. On pushes to main it runs as the first job of release.yaml, which calls
-# this workflow so that the release can wait for it.
+# The validation jobs. Not triggered on its own: pull-request.yaml calls it for pull requests into
+# main, and release.yaml calls it on pushes to main so that the release waits for it.
 on:
-  pull_request:
-    branches: [main]
   workflow_call:
 
 permissions:
   contents: read
 
-concurrency:
-  group: validate-${{ github.event.pull_request.number || github.ref }}
-  # A newer push to a PR supersedes the older run; runs on main are never cancelled, as that
-  # would skip the release waiting on them.
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
-
 jobs:
-
   validate-release-version:
     runs-on: ubuntu-latest
     steps:

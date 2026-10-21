@@ -10,7 +10,7 @@ from pathlib import Path
 import yaml
 
 ROOT = Path(__file__).resolve().parent.parent
-VERSION_PATH = ROOT / "VERSION"
+VERSION_PATH = ROOT / "version.json"
 CONFIG_DIR = ROOT / "config"
 MAPPINGS_PATH = ROOT / "mappings" / "mappings.yaml"
 SCHEMA_PATH = ROOT / "schema" / "schema.json"
@@ -140,10 +140,17 @@ def definition_version(definition: dict, section: str) -> str | None:
 
 
 def load_version(path: Path) -> str:
-    version = path.read_text().strip()
-    if not version:
-        raise SystemExit(f"{path} is empty")
-    return version
+    """The "version" string from a version.json such as {"version": "1.10.0-dev"}."""
+    try:
+        raw = json.loads(path.read_text())
+    except json.JSONDecodeError as err:
+        raise SystemExit(f"{path.name} is not valid JSON: {err}")
+    if not isinstance(raw, dict):
+        raise SystemExit(f'{path.name} must be a JSON object like {{"version": "1.0.0"}}')
+    version = raw.get("version")
+    if not isinstance(version, str) or not version.strip():
+        raise SystemExit(f'{path.name} must have a non-empty string "version"')
+    return version.strip()
 
 
 class OCSFSchema:

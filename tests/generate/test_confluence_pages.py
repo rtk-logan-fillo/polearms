@@ -421,10 +421,16 @@ class TestMain:
         assert base64.b64decode(header.removeprefix("Basic ")).decode() == "me:tok"
 
     def test_follows_the_version_file(self, project, confluence, monkeypatch):
-        project.version.write_text("9.9.9\n")
+        project.version.write_text('{"version": "9.9.9"}')
         run_main(monkeypatch, "--confluence-user", "u", "--confluence-token", "t")
         assert "Widget 9.9.9 - Mappings" in confluence.titles()
         assert not any("1.2.3" in t for t in confluence.titles())
+
+    def test_a_dev_version_gets_its_own_page_tree(self, project, confluence, monkeypatch):
+        project.version.write_text('{"version": "1.10.0-dev"}')
+        run_main(monkeypatch, "--confluence-user", "u", "--confluence-token", "t")
+        assert "1.10.0-dev" in confluence.titles()
+        assert "Widget 1.10.0-dev - Mappings" in confluence.titles()
 
     @pytest.mark.parametrize("args", [
         [], ["--confluence-user", "u"], ["--confluence-token", "t"],
@@ -440,9 +446,14 @@ class TestMain:
             run_main(monkeypatch, "--confluence-user", "u", "--confluence-token", "t")
         assert confluence.pages == {}
 
-    def test_an_empty_version_file_is_an_error(self, project, confluence, monkeypatch):
-        project.version.write_text("")
-        with pytest.raises(SystemExit, match="is empty"):
+    @pytest.mark.parametrize("contents,message", [
+        ("", "is not valid JSON"),
+        ('{"version": ""}', 'non-empty string "version"'),
+        ("{}", 'non-empty string "version"'),
+    ])
+    def test_a_bad_version_file_is_an_error_and_publishes_nothing(self, project, confluence, monkeypatch, contents, message):
+        project.version.write_text(contents)
+        with pytest.raises(SystemExit, match=message):
             run_main(monkeypatch, "--confluence-user", "u", "--confluence-token", "t")
         assert confluence.pages == {}
 

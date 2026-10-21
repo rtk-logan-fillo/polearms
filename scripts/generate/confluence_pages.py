@@ -7,7 +7,7 @@ For every class config under config/ this builds two pages, in Confluence storag
     <Class> <version> - Essential Fields  the class's essential fields, with schema info
 
 and creates or updates them in Confluence, under POLEARMS / <version> / <Class> <version> in the
-personal space of the given user. <version> is the contents of the VERSION file.
+personal space of the given user. <version> is the "version" in version.json.
 
 Usage:
     python3 -m scripts.generate.confluence_pages --confluence-user USER --confluence-token TOKEN

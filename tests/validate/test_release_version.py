@@ -1,3 +1,4 @@
+import json
 import subprocess
 import sys
 
@@ -47,7 +48,7 @@ class TestValidateReleaseVersion:
 
     def test_a_minor_mismatch_fails(self):
         issue = only(rv.validate_release_version("1.3.0", definition("1.2.0")))
-        assert (issue.step, issue.severity, issue.target) == ("release-version", "error", "VERSION")
+        assert (issue.step, issue.severity, issue.target) == ("release-version", "error", "version.json")
         assert "1.3" in issue.message and "1.2" in issue.message and "must match" in issue.message
 
     def test_a_major_mismatch_fails(self):
@@ -79,11 +80,15 @@ class TestValidateReleaseVersion:
         assert "not a semantic version" in only(rv.validate_release_version("1.2.0", definition(1.2))).message
 
 
+def version_file(version):
+    return json.dumps({"version": version})
+
+
 class TestMain:
     @pytest.fixture
     def paths(self, tmp_path, monkeypatch):
-        version, defn = tmp_path / "VERSION", tmp_path / "def.yaml"
-        version.write_text("1.2.5\n")
+        version, defn = tmp_path / "version.json", tmp_path / "def.yaml"
+        version.write_text(version_file("1.2.5"))
         defn.write_text(yaml.safe_dump(definition("1.2.0")))
         monkeypatch.setattr(rv, "VERSION_PATH", version)
         monkeypatch.setattr(rv, "SCHEMA_DEFINITION_PATH", defn)
@@ -94,8 +99,13 @@ class TestMain:
         rv.main()
         assert capsys.readouterr().out == "release version: ok\n"
 
+    def test_a_dev_version_tracks_the_extension_like_any_other(self, paths, capsys):
+        paths[0].write_text(version_file("1.2.0-dev"))
+        rv.main()
+        assert capsys.readouterr().out == "release version: ok\n"
+
     def test_exits_1_on_a_mismatch(self, paths, capsys):
-        paths[0].write_text("1.3.0\n")
+        paths[0].write_text(version_file("1.3.0"))
         with pytest.raises(SystemExit) as exc:
             rv.main()
         assert exc.value.code == 1
@@ -106,9 +116,33 @@ class TestMain:
         with pytest.raises(SystemExit):
             rv.main()
 
-    def test_an_empty_version_file_exits(self, paths):
-        paths[0].write_text("")
+    @pytest.mark.parametrize("contents,fragment", [
+        ('{"version": "1.2"}', "expected a semantic version"),
+        ('{"version": "v1.2.5"}', "expected a semantic version"),
+        ('{"version": ""}', "expected a semantic version"),
+        ('{"version": 1.2}', "is not of type 'string'"),
+        ("{}", "'version' is required"),
+        ('{"version": "1.2.5", "build": 7}', "unknown key(s) 'build'"),
+        ('["1.2.5"]', "is not of type 'object'"),
+    ])
+    def test_a_malformed_version_file_is_reported_by_the_json_schema(self, paths, capsys, contents, fragment):
+        paths[0].write_text(contents)
+        with pytest.raises(SystemExit) as exc:
+            rv.main()
+        assert exc.value.code == 1
+        out = capsys.readouterr().out
+        assert "[json-schema] version.json" in out and fragment in out
+
+    def test_versions_are_not_compared_when_the_file_is_malformed(self, paths, capsys):
+        paths[0].write_text('{"version": "9.9"}')       # would also mismatch 1.2.0
         with pytest.raises(SystemExit):
+            rv.main()
+        assert "release-version" not in capsys.readouterr().out
+
+    @pytest.mark.parametrize("contents", ["", "1.2.5", '{"version": '])
+    def test_a_file_that_is_not_json_exits_with_a_clear_message(self, paths, contents):
+        paths[0].write_text(contents)
+        with pytest.raises(SystemExit, match="version.json is not valid JSON"):
             rv.main()
 
 

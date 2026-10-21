@@ -53,12 +53,12 @@ def mini_schema() -> OCSFSchema:
 
 @pytest.fixture
 def fake_project(tmp_path):
-    """A tiny repo layout (VERSION, mappings, schema, one class config) in a temp dir.
+    """A tiny repo layout (version.json, mappings, schema, one class config) in a temp dir.
 
     Returns the paths, named like the constants in common, ready to monkeypatch in.
     """
-    version = tmp_path / "VERSION"
-    version.write_text("1.2.3\n")
+    version = tmp_path / "version.json"
+    version.write_text(json.dumps({"version": "1.2.3"}))
 
     mappings = tmp_path / "mappings.yaml"
     mappings.write_text(yaml.safe_dump({"mappings": [
