@@ -1,0 +1,61 @@
+name: Pull request
+
+# The checks for a pull request into main, in order: first everything in validate.yaml, then, if the
+# pull request changed schema/schema_definition.yaml, compile-schema.yaml. A schema is never built
+# from a change that does not validate.
+#
+# This lives in its own workflow, not in validate.yaml, so that validate.yaml only ever holds the
+# validation jobs. release.yaml calls validate.yaml on pushes to main and waits on the result; none
+# of the pull-request-only jobs below can be part of that.
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+# A newer push to the pull request supersedes the older run. The compile job's own commit to the
+# branch is a push that starts a new run, which is intended: the new run validates the compiled
+# schema. It does not compile again, since the definition is not changed by that commit.
+concurrency:
+  group: pull-request-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    uses: ./.github/workflows/validate.yaml
+
+  # Did this pull request change the schema definition?
+  definition-changed:
+    runs-on: ubuntu-latest
+    outputs:
+      changed: ${{ steps.diff.outputs.changed }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Compare with the base branch
+        id: diff
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          # Three-dot: only what this pull request changed since it branched from the base.
+          # `git diff --quiet` exits 0 for no differences, 1 for differences, and anything else
+          # for an error; an error must fail the job, not be mistaken for "changed".
+          status=0
+          git diff --quiet "origin/$BASE_REF...HEAD" -- schema/schema_definition.yaml || status=$?
+          case "$status" in
+            0) echo "changed=false" >> "$GITHUB_OUTPUT" ;;
+            1) echo "changed=true" >> "$GITHUB_OUTPUT" ;;
+            *) echo "::error::git diff against origin/$BASE_REF failed (exit $status)"; exit "$status" ;;
+          esac
+
+  compile-schema:
+    needs: [validate, definition-changed]
+    if: needs.definition-changed.outputs.changed == 'true'
+    # Committing to the pull request's branch needs write access, which the validation jobs don't.
+    permissions:
+      contents: write
+    uses: ./.github/workflows/compile-schema.yaml

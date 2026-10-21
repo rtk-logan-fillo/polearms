@@ -160,16 +160,38 @@ class TestLoaders:
         path.write_text("")
         assert pc.load_mappings(path) == []
 
+    def test_load_version_reads_the_version_key(self, tmp_path):
+        path = tmp_path / "version.json"
+        path.write_text('{"version": "1.10.0-dev"}')
+        assert pc.load_version(path) == "1.10.0-dev"
+
     def test_load_version_strips_whitespace(self, tmp_path):
-        path = tmp_path / "VERSION"
-        path.write_text("  1.2.3\n\n")
+        path = tmp_path / "version.json"
+        path.write_text('{"version": "  1.2.3 "}\n')
         assert pc.load_version(path) == "1.2.3"
 
-    def test_load_version_rejects_an_empty_file(self, tmp_path):
-        path = tmp_path / "VERSION"
-        path.write_text("\n")
-        with pytest.raises(SystemExit, match="is empty"):
+    @pytest.mark.parametrize("text,message", [
+        ("", "is not valid JSON"),
+        ('{"version": ', "is not valid JSON"),
+        ("1.2.3", "is not valid JSON"),               # not JSON: a number followed by more text
+        ("1.2", "must be a JSON object"),             # valid JSON, but a number, not an object
+        ('"1.2.3"', "must be a JSON object"),
+        ("[]", "must be a JSON object"),
+        ("{}", 'non-empty string "version"'),
+        ('{"ver": "1.2.3"}', 'non-empty string "version"'),
+        ('{"version": ""}', 'non-empty string "version"'),
+        ('{"version": "   "}', 'non-empty string "version"'),
+        ('{"version": 1}', 'non-empty string "version"'),
+        ('{"version": null}', 'non-empty string "version"'),
+    ])
+    def test_load_version_rejects_bad_files_with_a_clear_message(self, tmp_path, text, message):
+        path = tmp_path / "version.json"
+        path.write_text(text)
+        with pytest.raises(SystemExit, match=message):
             pc.load_version(path)
+
+    def test_the_default_version_path_is_version_json(self):
+        assert pc.VERSION_PATH == pc.ROOT / "version.json"
 
     def test_discover_class_configs_is_recursive_and_sorted(self, tmp_path):
         for rel in ("b/config.yaml", "a/config.yaml", "a/nested/config.yaml", "a/other.yaml"):

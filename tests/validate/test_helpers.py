@@ -52,16 +52,22 @@ import json
 
 import yaml
 
-from scripts.common import CONFIG_DIR, MAPPINGS_PATH, SCHEMA_DEFINITION_PATH, discover_class_configs
+from scripts.common import (
+    CONFIG_DIR,
+    MAPPINGS_PATH,
+    SCHEMA_DEFINITION_PATH,
+    VERSION_PATH,
+    discover_class_configs,
+)
 
 SCHEMA_FILES = sorted(v.SCHEMAS_DIR.glob("*.schema.json"))
 
 
 class TestSchemaFiles:
-    def test_all_four_schemas_exist(self):
+    def test_all_the_schemas_exist(self):
         assert {p.name for p in SCHEMA_FILES} == {
             "config.schema.json", "mapping.schema.json", "mappings.schema.json",
-            "schema_definition.schema.json"}
+            "schema_definition.schema.json", "version.schema.json"}
 
     @pytest.mark.parametrize("path", SCHEMA_FILES, ids=lambda p: p.name)
     def test_each_is_a_valid_json_schema(self, path):
@@ -73,7 +79,7 @@ class TestSchemaFiles:
         assert json.loads(path.read_text())["$id"] == path.name
 
     @pytest.mark.parametrize("name", ["config.schema.json", "mappings.schema.json",
-                                      "schema_definition.schema.json"])
+                                      "schema_definition.schema.json", "version.schema.json"])
     def test_top_level_documents_reject_unknown_keys(self, name):
         assert json.loads((v.SCHEMAS_DIR / name).read_text())["additionalProperties"] is False
 
@@ -141,6 +147,18 @@ class TestValidateAgainstSchema:
                 "schema_definition.schema.json", "t"), version
 
 
+class TestVersionSchema:
+    @pytest.mark.parametrize("version", [
+        "0.0.0", "1.10.0", "1.10.0-dev", "1.10.0-dev.2", "1.0.0-rc.1", "1.0.0+build.5", "1.0.0-rc.1+b",
+    ])
+    def test_accepts_semantic_versions_including_pre_releases(self, version):
+        assert v.validate_against_schema({"version": version}, "version.schema.json", "t") == []
+
+    @pytest.mark.parametrize("version", ["1.0", "1", "v1.0.0", "1.0.0.0", "", " 1.0.0", "1.0.0-", "dev", None, 1, 1.0])
+    def test_rejects_everything_else(self, version):
+        assert v.validate_against_schema({"version": version}, "version.schema.json", "t")
+
+
 class TestRealFilesMatchTheirSchemas:
     def test_mappings_yaml(self):
         assert v.validate_against_schema(
@@ -150,6 +168,10 @@ class TestRealFilesMatchTheirSchemas:
         assert v.validate_against_schema(
             yaml.safe_load(SCHEMA_DEFINITION_PATH.read_text()),
             "schema_definition.schema.json", "schema_definition.yaml") == []
+
+    def test_version_json(self):
+        assert v.validate_against_schema(
+            json.loads(VERSION_PATH.read_text()), "version.schema.json", "version.json") == []
 
     def test_every_class_config(self):
         paths = discover_class_configs(CONFIG_DIR)

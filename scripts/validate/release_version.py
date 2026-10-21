@@ -1,11 +1,14 @@
 #!/usr/bin/env python3
-"""Validate that the version being released (the VERSION file) tracks the Arctic Wolf extension.
+"""Validate that the version being released (version.json) tracks the Arctic Wolf extension.
 
-The major and minor parts of VERSION must equal those of arcticwolf_extension.version in
-schema/schema_definition.yaml. The patch part (and any pre-release suffix) is free to differ.
+version.json is checked against its JSON Schema first. Its version's major and minor must then equal
+those of arcticwolf_extension.version in schema/schema_definition.yaml. The patch part (and any
+pre-release suffix such as -dev) is free to differ.
 
 Steps, by ID:
-    release-version         VERSION and arcticwolf_extension.version agree on major.minor
+    json-schema             version.json matches its JSON Schema
+                            (scripts/validate/schemas/version.schema.json)
+    release-version         version.json and arcticwolf_extension.version agree on major.minor
 
 Exits 1 if there are any errors.
 
@@ -16,6 +19,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import json
 import re
 
 from scripts.common import (
@@ -25,7 +29,7 @@ from scripts.common import (
     load_definition,
     load_version,
 )
-from scripts.validate.helpers import Issue, error, exit_if_errors, report
+from scripts.validate.helpers import Issue, error, exit_if_errors, report, validate_against_schema
 
 STEP_RELEASE_VERSION = "release-version"
 
@@ -39,7 +43,7 @@ def major_minor(version: str) -> tuple[int, int] | None:
 
 
 def validate_release_version(version: str, definition: dict) -> list[Issue]:
-    target = "VERSION"
+    target = "version.json"
     extension = definition_version(definition, "arcticwolf_extension")
     if extension is None:
         return [error(target, STEP_RELEASE_VERSION,
@@ -47,7 +51,7 @@ def validate_release_version(version: str, definition: dict) -> list[Issue]:
 
     release, tracked = major_minor(version), major_minor(extension)
     if release is None:
-        return [error(target, STEP_RELEASE_VERSION, f"VERSION {version!r} is not a semantic version")]
+        return [error(target, STEP_RELEASE_VERSION, f"version.json version {version!r} is not a semantic version")]
     if tracked is None:
         return [error(target, STEP_RELEASE_VERSION,
                       f"schema_definition.yaml arcticwolf_extension.version {extension!r} "
@@ -56,7 +60,7 @@ def validate_release_version(version: str, definition: dict) -> list[Issue]:
     if release != tracked:
         return [error(
             target, STEP_RELEASE_VERSION,
-            f"VERSION {version!r} has major.minor {release[0]}.{release[1]}, but "
+            f"version.json version {version!r} has major.minor {release[0]}.{release[1]}, but "
             f"schema_definition.yaml arcticwolf_extension.version {extension!r} has "
             f"{tracked[0]}.{tracked[1]}; they must match")]
     return []
@@ -66,8 +70,16 @@ def main() -> None:
     argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter).parse_args()
 
-    issues = validate_release_version(
-        load_version(VERSION_PATH), load_definition(SCHEMA_DEFINITION_PATH))
+    try:
+        raw = json.loads(VERSION_PATH.read_text())
+    except json.JSONDecodeError as err:
+        raise SystemExit(f"{VERSION_PATH.name} is not valid JSON: {err}")
+
+    # The versions can only be compared once version.json is well-formed.
+    issues = validate_against_schema(raw, "version.schema.json", VERSION_PATH.name)
+    if not issues:
+        issues = validate_release_version(
+            load_version(VERSION_PATH), load_definition(SCHEMA_DEFINITION_PATH))
     report("release version", issues)
     exit_if_errors(issues)
 
