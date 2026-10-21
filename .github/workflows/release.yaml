@@ -33,13 +33,15 @@ jobs:
             exit 1
           fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
-          echo "tag=v$version" >> "$GITHUB_OUTPUT"
+          echo "tag=$version" >> "$GITHUB_OUTPUT"
 
+      # Tags are the bare version (1.0.4). Releases before this change were tagged with a "v"
+      # prefix (v1.0.3), so a version that was released under either name counts as released.
       - name: Check whether tag already exists
         id: tag_check
         run: |
-          if git ls-remote --exit-code --tags origin "refs/tags/${{ steps.version.outputs.tag }}" > /dev/null; then
-            echo "::warning::Tag ${{ steps.version.outputs.tag }} already exists; bump VERSION to publish a new release."
+          if git ls-remote --exit-code --tags origin "refs/tags/${{ steps.version.outputs.tag }}" "refs/tags/v${{ steps.version.outputs.tag }}" > /dev/null; then
+            echo "::warning::Version ${{ steps.version.outputs.tag }} is already released (tag ${{ steps.version.outputs.tag }} or v${{ steps.version.outputs.tag }} exists); bump VERSION to publish a new release."
             echo "exists=true" >> "$GITHUB_OUTPUT"
           else
             echo "exists=false" >> "$GITHUB_OUTPUT"
