@@ -97,8 +97,9 @@ class TestCommandLine:
 
 class TestCommittedClassMap:
     def test_matches_what_the_generator_produces_from_the_real_schema(self):
-        """Drift check: the release regenerates class_map.yaml, but complex_mappings.py reads the
-        committed copy at import time, so a stale file means the repo and the release disagree.
+        """Drift check: validate-and-compile-schema regenerates class_map.yaml, but
+        complex_mappings.py reads the committed copy at import time, so a stale file means the
+        repo and the schema disagree.
         If this fails, run `python -m scripts.generate.class_map` and commit the result."""
         import scripts.common as pc
         generated = gcm.build_class_map(gcm.load_schema(pc.SCHEMA_PATH))

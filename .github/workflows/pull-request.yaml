@@ -1,40 +1,52 @@
 name: Pull request
 
-# The checks for a pull request into main, in order:
-#
-#   1. compile    compile-schema.yaml: if schema.json was built from different OCSF or Arctic Wolf
-#                 extension versions than schema_definition.yaml names, rebuild it and the class map
-#                 and commit them to the branch; otherwise do nothing
-#   2. validate   validate.yaml, once compile has finished. If compile pushed a commit, validate runs
-#                 on it, so the new schema is what gets validated
-#
-# Validate waits for compile because the validators read schema.json. If compile fails, validate
-# does not run.
+# The checks for a pull request into main that changes anything outside schema/. A pull request that
+# only changes schema/ is handled by validate-and-compile-schema.yaml instead.
 on:
   pull_request:
     branches: [main]
+    paths-ignore:
+      - "schema/**"
 
 permissions:
   contents: read
 
-# A newer push to the pull request supersedes the older run. A run that is cancelled while compile is
-# in progress is safe: compile commits all-or-nothing, in its last step.
+# A newer push to the pull request supersedes the older run.
 concurrency:
   group: pull-request-${{ github.event.pull_request.number }}
   cancel-in-progress: true
 
 jobs:
-  compile:
-    # Committing to the pull request's branch needs write access, which nothing else here has.
-    permissions:
-      contents: write
-    uses: ./.github/workflows/compile-schema.yaml
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
 
-  validate:
-    needs: compile
-    uses: ./.github/workflows/validate.yaml
-    with:
-      # The commit compile pushed, so the new schema is what gets validated. If compile had nothing
-      # to do there is none, and the empty value makes validate check out the pull request's usual
-      # merge commit, so it still catches a conflict with a newer main.
-      ref: ${{ needs.compile.outputs.sha }}
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Create virtualenv
+        run: |
+          python -m venv .venv
+          .venv/bin/pip install --upgrade pip
+          .venv/bin/pip install -r requirements.txt
+          echo "$GITHUB_WORKSPACE/.venv/bin" >> "$GITHUB_PATH"
+
+      - name: Validate release version
+        run: python -m scripts.validate.release_version
+
+      # The SWORDS schema is downloaded from the private parse_and_detect repository, which the
+      # workflow's own token cannot read.
+      - name: Validate mappings
+        env:
+          GH_TOKEN: ${{ secrets.PARSE_AND_DETECT_TOKEN }}
+        run: python -m scripts.validate.mappings
+
+      - name: Validate config
+        run: python -m scripts.validate.config
+
+      - name: Run tests
+        run: python -m pytest

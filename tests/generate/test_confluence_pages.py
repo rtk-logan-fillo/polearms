@@ -39,17 +39,6 @@ class TestRow:
         assert gcp.Row(polearms_field="a", join_sep="").shown_field() == 'join(a, "")'
 
 
-class TestLoadSwordsSchema:
-    def test_missing_file_warns_and_returns_empty(self, tmp_path, capsys):
-        assert gcp.load_swords_schema(tmp_path / "nope.json") == {}
-        assert "SWORDS schema not found" in capsys.readouterr().err
-
-    def test_loads_json(self, tmp_path):
-        path = tmp_path / "s.json"
-        path.write_text('{"a.b": {"datatype": "string", "is_list": false}}')
-        assert gcp.load_swords_schema(path) == {"a.b": {"datatype": "string", "is_list": False}}
-
-
 # ---------------------------------------------------------------------------
 # essential-field filtering
 # ---------------------------------------------------------------------------
@@ -126,6 +115,22 @@ class TestBuildMappingRows:
     def test_list_swords_types_get_brackets(self, mini_schema):
         (row,) = rows_for(mini_schema, [Mapping(polearms="tags", swords="owner-tags")])
         assert row.swords_type == "string[]"
+
+    def test_swords_type_comes_from_the_swords_schema_datatype(self, mini_schema):
+        schema = {"a": {"datatype": "int", "is_list": False}, "b": {"datatype": "ip", "is_list": True}}
+        rows = rows_for(mini_schema, [Mapping(polearms="name", swords="a"), Mapping(polearms="tags", swords="b")],
+                        swords=schema)
+        assert {r.swords: r.swords_type for r in rows} == {"a": "int", "b": "ip[]"}
+
+    def test_swords_type_looks_up_the_path_without_its_labels(self, mini_schema):
+        m = Mapping(polearms="owner[x].email", swords="t[y].z", labels={"x": "k", "y": "k"}, mapper={"fn": "map_x"})
+        (row,) = rows_for(mini_schema, [m], swords={"t.z": {"datatype": "long", "is_list": False}})
+        assert row.swords_type == "long"
+
+    def test_a_swords_field_without_a_datatype_has_a_blank_type(self, mini_schema):
+        (row,) = rows_for(mini_schema, [Mapping(polearms="tags", swords="s")],
+                          swords={"s": {"datatype": None, "is_list": True}})
+        assert row.swords_type == ""
 
     def test_unknown_swords_field_has_a_blank_type(self, mini_schema):
         (row,) = rows_for(mini_schema, [Mapping(polearms="name", swords="other")])
@@ -398,7 +403,7 @@ def project(fake_project, confluence, monkeypatch):
         "VERSION_PATH": fake_project.version, "CONFIG_DIR": fake_project.config_dir,
     }.items():
         monkeypatch.setattr(gcp, name, path)
-    monkeypatch.setattr(gcp, "SWORDS_SCHEMA_PATH", fake_project.root / "absent.json")
+    monkeypatch.setattr(gcp, "SWORDS_SCHEMA_PATH", fake_project.swords_schema)
     monkeypatch.setattr(gcp, "CONFLUENCE_URL", confluence.url)
     return fake_project
 

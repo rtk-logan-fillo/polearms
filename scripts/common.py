@@ -15,6 +15,7 @@ CONFIG_DIR = ROOT / "config"
 MAPPINGS_PATH = ROOT / "mappings" / "mappings.yaml"
 SCHEMA_PATH = ROOT / "schema" / "schema.json"
 SCHEMA_DEFINITION_PATH = ROOT / "schema" / "schema_definition.yaml"
+SWORDS_SCHEMA_PATH = ROOT / "schema" / "carser_swords_schema.json"
 COMPLEX_MAPPINGS_PATH = ROOT / "mappings" / "complex_mappings.py"
 CLASS_MAP_PATH = ROOT / "mappings" / "class_map.yaml"
 

@@ -8,6 +8,10 @@ from scripts.common import ROOT, ClassConfig, Mapping
 from scripts.validate import mappings as vm
 
 FNS = {"map_x", "map_y"}
+SWORDS_SCHEMA = {
+    name: {"datatype": "string", "is_list": False}
+    for name in ("s", "t.z", "dup", "widget-name", "owner-email", "brand-new", "elsewhere", "g")
+}
 
 
 def steps(issues):
@@ -224,6 +228,36 @@ class TestValidPolearmsField:
 
 
 # ---------------------------------------------------------------------------
+# valid SWORDS field
+# ---------------------------------------------------------------------------
+
+
+class TestValidSwordsField:
+    SCHEMA = {"a.b": {"datatype": "int", "is_list": False}, "list.item.x": {"datatype": None, "is_list": True}}
+
+    def test_a_field_in_the_swords_schema_is_valid(self):
+        assert vm.validate_swords_fields([Mapping(polearms="p", swords="a.b")], self.SCHEMA) == []
+
+    def test_a_field_not_in_the_swords_schema_is_invalid(self):
+        issues = vm.validate_swords_fields([Mapping(polearms="p", swords="a.nope")], self.SCHEMA)
+        assert steps(issues) == [("valid-swords-field", "error")]
+        assert issues[0].message == "'a.nope' is not a field in the SWORDS schema"
+        assert issues[0].target == "p"
+
+    def test_bracket_segments_are_ignored(self):
+        m = Mapping(polearms="p", swords="list[k].item[].x", labels={"k": "i==0"})
+        assert vm.validate_swords_fields([m], self.SCHEMA) == []
+
+    def test_a_field_with_no_datatype_is_still_a_valid_field(self):
+        assert vm.validate_swords_fields([Mapping(polearms="p", swords="list.item.x")], self.SCHEMA) == []
+
+    def test_every_invalid_mapping_is_reported(self):
+        mappings = [Mapping(polearms="p", swords="x"), Mapping(polearms="q", swords="a.b"),
+                    Mapping(polearms="r", swords="y")]
+        assert [i.target for i in vm.validate_swords_fields(mappings, self.SCHEMA)] == ["p", "r"]
+
+
+# ---------------------------------------------------------------------------
 # overrides
 # ---------------------------------------------------------------------------
 
@@ -321,32 +355,40 @@ class TestEntryPoints:
                            override_mappings=kw.get("overrides", []))
 
     def test_global_mappings_clean(self, mini_schema):
-        assert vm.validate_global_mappings(GLOBALS, mini_schema, FNS, "1") == []
+        assert vm.validate_global_mappings(GLOBALS, mini_schema, SWORDS_SCHEMA, FNS, "1") == []
 
     def test_global_mappings_report_issues_from_every_step(self, mini_schema):
         mappings = [
             Mapping(polearms="name", swords="dup"),
             Mapping(polearms="bogus", swords="dup"),                       # unique swords + invalid field
+            Mapping(polearms="owner.email", swords="not-in-swords-schema"),
             Mapping(polearms="tags", swords="s", mapper={"fn": "map_nope"}),  # unknown mapper
         ]
-        got = {s for s, _ in steps(vm.validate_global_mappings(mappings, mini_schema, FNS, "1"))}
-        assert got == {"unique-swords-field", "valid-polearms-field", "mapper-function"}
+        got = {s for s, _ in steps(vm.validate_global_mappings(mappings, mini_schema, SWORDS_SCHEMA, FNS, "1"))}
+        assert got == {"unique-swords-field", "valid-polearms-field", "valid-swords-field", "mapper-function"}
 
     def test_class_without_overrides_has_nothing_to_validate(self, mini_schema):
-        assert vm.validate_class_overrides(self.config(), GLOBALS, mini_schema, FNS, "1") == []
+        assert vm.validate_class_overrides(
+            self.config(), GLOBALS, mini_schema, SWORDS_SCHEMA, FNS, "1") == []
 
     def test_class_overrides_run_every_override_step(self, mini_schema):
         overrides = [
             Mapping(polearms="serial", swords="widget-name"),      # invalid for widget; displaces a global
         ]
         got = {s for s, _ in steps(vm.validate_class_overrides(
-            self.config(overrides=overrides), GLOBALS, mini_schema, FNS, "1"))}
+            self.config(overrides=overrides), GLOBALS, mini_schema, SWORDS_SCHEMA, FNS, "1"))}
         assert {"valid-polearms-field", "override-relevance"} <= got
+
+    def test_overrides_are_checked_against_the_swords_schema(self, mini_schema):
+        overrides = [Mapping(polearms="tags", swords="not-in-swords-schema")]
+        got = steps(vm.validate_class_overrides(
+            self.config(overrides=overrides), GLOBALS, mini_schema, SWORDS_SCHEMA, FNS, "1"))
+        assert got == [("valid-swords-field", "error")]
 
     def test_valid_overrides_are_clean(self, mini_schema):
         overrides = [Mapping(polearms="tags", swords="brand-new")]
         assert vm.validate_class_overrides(self.config(overrides=overrides), GLOBALS,
-                                           mini_schema, FNS, "1") == []
+                                           mini_schema, SWORDS_SCHEMA, FNS, "1") == []
 
     def test_load_mapper_function_names_reads_top_level_defs_without_importing(self, tmp_path):
         path = tmp_path / "cm.py"
@@ -381,6 +423,7 @@ def project(fake_project, monkeypatch):
         "COMPLEX_MAPPINGS_PATH": fake_project.complex_mappings,
     }.items():
         monkeypatch.setattr(vm, name, path)
+    monkeypatch.setattr(vm, "SWORDS_SCHEMA_PATH", fake_project.swords_schema)
     monkeypatch.setattr(sys, "argv", ["mappings.py"])
     return fake_project
 
@@ -419,6 +462,23 @@ class TestMain:
         vm.main()   # must not raise SystemExit
         out = capsys.readouterr().out
         assert "override-shadowing" in out and "WARNING" in out
+
+    def test_exits_1_on_a_swords_field_missing_from_the_swords_schema(self, project, capsys):
+        project.mappings.write_text(yaml.safe_dump({"mappings": [
+            {"polearms": "name", "swords": "not-in-swords-schema"}]}))
+        with pytest.raises(SystemExit) as exc:
+            vm.main()
+        assert exc.value.code == 1
+        assert "[valid-swords-field]" in capsys.readouterr().out
+
+    def test_exits_1_on_an_override_swords_field_missing_from_the_swords_schema(self, project, capsys):
+        project.widget_config.write_text(yaml.safe_dump({
+            "class_name": "widget",
+            "override_mappings": [{"polearms": "tags", "swords": "not-in-swords-schema"}]}))
+        with pytest.raises(SystemExit) as exc:
+            vm.main()
+        assert exc.value.code == 1
+        assert "[valid-swords-field]" in capsys.readouterr().out
 
     def test_unknown_mapper_in_the_mappings_file_fails(self, project):
         project.mappings.write_text(yaml.safe_dump({"mappings": [

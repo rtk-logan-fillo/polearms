@@ -26,3 +26,5 @@ htmlcov/
 
 # Generated output
 build/
+# Downloaded by scripts/swords_schema.py
+carser_swords_schema.json

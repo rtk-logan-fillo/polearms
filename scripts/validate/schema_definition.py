@@ -2,7 +2,7 @@
 """Validate schema/schema_definition.yaml against its JSON Schema.
 
 Only the file's structure is checked: the two sections, and that each version is a quoted
-semantic-version string. The versions are not compared with anything; the compile-schema workflow
+semantic-version string. The versions are not compared with anything; the validate-and-compile-schema workflow
 builds schema.json from whatever versions this file names.
 
 Steps, by ID:

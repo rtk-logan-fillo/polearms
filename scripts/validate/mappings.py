@@ -10,14 +10,15 @@ Steps, by ID:
     labels                  every [key] in a path has a labels entry, and every label is used
     mapper-function         the mapper function exists in complex_mappings.py
     valid-polearms-field    the POLEARMS field exists in the schema
+    valid-swords-field      the SWORDS field exists in the SWORDS schema
     unique-polearms-field   no (POLEARMS base path, mapper) pair appears twice
     unique-swords-field     no SWORDS field appears twice
     override-relevance      override POLEARMS fields exist for the class
     override-completeness   an override of a global SWORDS field also covers the displaced field
     override-shadowing      warns when an override abandons a global mapping's SWORDS destination
 
-The SWORDS-schema steps (valid-swords-field) are not run, as the SWORDS schema is not available
-here.
+The SWORDS schema is downloaded to schema/carser_swords_schema.json if it is not already there
+(see scripts/swords_schema.py).
 
 Exits 1 if there are any errors; warnings alone do not fail the run.
 
@@ -38,6 +39,7 @@ from scripts.common import (
     CONFIG_DIR,
     MAPPINGS_PATH,
     SCHEMA_PATH,
+    SWORDS_SCHEMA_PATH,
     VERSION_PATH,
     ClassConfig,
     Mapping,
@@ -56,10 +58,12 @@ from scripts.validate.helpers import (  # noqa: F401  (re-exported for callers a
     validate_against_schema,
     warning,
 )
+from scripts.swords_schema import load_swords_schema
 
 STEP_LABELS = "labels"
 STEP_MAPPER_FUNCTION = "mapper-function"
 STEP_VALID_POLEARMS_FIELD = "valid-polearms-field"
+STEP_VALID_SWORDS_FIELD = "valid-swords-field"
 STEP_UNIQUE_POLEARMS_FIELD = "unique-polearms-field"
 STEP_UNIQUE_SWORDS_FIELD = "unique-swords-field"
 STEP_OVERRIDE_RELEVANCE = "override-relevance"
@@ -138,6 +142,16 @@ def validate_polearms_fields(
                     m.display_name(), STEP_VALID_POLEARMS_FIELD,
                     f"{base!r} is not a valid POLEARMS field for {class_desc} in version {version}"))
     return issues
+
+
+def validate_swords_fields(mappings: list[Mapping], swords_schema: dict) -> list[Issue]:
+    """Every SWORDS field (with its [key] segments stripped) must exist in the SWORDS schema."""
+    return [
+        error(m.display_name(), STEP_VALID_SWORDS_FIELD,
+              f"{m.swords_field_path()!r} is not a field in the SWORDS schema")
+        for m in mappings
+        if m.swords and m.swords_field_path() not in swords_schema
+    ]
 
 
 def field_exists(schema: OCSFSchema, class_name: str | None, path: str) -> bool:
@@ -227,17 +241,19 @@ def validate_override_shadowing(
 
 
 def validate_global_mappings(
-    mappings: list[Mapping], schema: OCSFSchema, mapper_fns: set[str], version: str,
+    mappings: list[Mapping], schema: OCSFSchema, swords_schema: dict,
+    mapper_fns: set[str], version: str,
 ) -> list[Issue]:
     issues = validate_uniqueness(mappings)
     for m in mappings:
         issues += validate_single_mapping(m, mapper_fns)
     issues += validate_polearms_fields(mappings, schema, None, version)
+    issues += validate_swords_fields(mappings, swords_schema)
     return issues
 
 
 def validate_class_overrides(
-    config: ClassConfig, globals_: list[Mapping], schema: OCSFSchema,
+    config: ClassConfig, globals_: list[Mapping], schema: OCSFSchema, swords_schema: dict,
     mapper_fns: set[str], version: str,
 ) -> list[Issue]:
     overrides = config.override_mappings
@@ -247,6 +263,7 @@ def validate_class_overrides(
     for m in overrides:
         issues += validate_single_mapping(m, mapper_fns)
     issues += validate_polearms_fields(overrides, schema, config.name, version)
+    issues += validate_swords_fields(overrides, swords_schema)
     issues += validate_override_relevance(overrides, schema, config.name, version)
     issues += validate_override_completeness(overrides, globals_, schema, config.name)
     issues += validate_override_shadowing(overrides, globals_, schema, config.name)
@@ -262,6 +279,7 @@ def main() -> None:
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter).parse_args()
 
     schema = OCSFSchema.load(SCHEMA_PATH)
+    swords_schema = load_swords_schema(SWORDS_SCHEMA_PATH)
     mapper_fns = load_mapper_function_names(COMPLEX_MAPPINGS_PATH)
     version = load_version(VERSION_PATH)
 
@@ -270,7 +288,7 @@ def main() -> None:
     issues = validate_against_schema(load_yaml(MAPPINGS_PATH), "mappings.schema.json", MAPPINGS_PATH.name)
     globals_ = [] if issues else load_mappings(MAPPINGS_PATH)
     if not issues:
-        issues = validate_global_mappings(globals_, schema, mapper_fns, version)
+        issues = validate_global_mappings(globals_, schema, swords_schema, mapper_fns, version)
     report("global mappings", issues)
     all_issues = list(issues)
     globals_usable = not issues
@@ -290,7 +308,8 @@ def main() -> None:
         if not issues and name:
             if globals_usable:
                 config = ClassConfig.load(path)
-                issues = validate_class_overrides(config, globals_, schema, mapper_fns, version)
+                issues = validate_class_overrides(
+                    config, globals_, schema, swords_schema, mapper_fns, version)
             else:
                 # The override checks compare against the global mappings, which failed above.
                 print(f"{title}: skipped (global mappings are invalid)")

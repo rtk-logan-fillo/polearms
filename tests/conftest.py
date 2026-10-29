@@ -69,6 +69,12 @@ def fake_project(tmp_path):
     schema = tmp_path / "schema.json"
     schema.write_text(json.dumps(MINI_SCHEMA))
 
+    swords_schema = tmp_path / "carser_swords_schema.json"
+    swords_schema.write_text(json.dumps({
+        name: {"datatype": "string", "is_list": False, "presence": "optional"}
+        for name in ("widget-name", "owner-email", "s", "x", "elsewhere")
+    }))
+
     complex_mappings = tmp_path / "complex_mappings.py"
     complex_mappings.write_text("def map_x(value):\n    return value\n")
 
@@ -82,6 +88,6 @@ def fake_project(tmp_path):
 
     return SimpleNamespace(
         root=tmp_path, version=version, mappings=mappings, schema=schema,
-        complex_mappings=complex_mappings, config_dir=config_dir,
+        complex_mappings=complex_mappings, config_dir=config_dir, swords_schema=swords_schema,
         widget_config=config_dir / "widget" / "config.yaml",
     )

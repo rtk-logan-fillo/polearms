@@ -12,11 +12,7 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  validate:
-    uses: ./.github/workflows/validate.yaml
-
   release:
-    needs: validate
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -49,13 +45,11 @@ jobs:
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "tag=$version" >> "$GITHUB_OUTPUT"
 
-      # Tags are the bare version (1.0.4). Releases before this change were tagged with a "v"
-      # prefix (v1.0.3), so a version that was released under either name counts as released.
       - name: Check whether tag already exists
         id: tag_check
         run: |
-          if git ls-remote --exit-code --tags origin "refs/tags/${{ steps.version.outputs.tag }}" "refs/tags/v${{ steps.version.outputs.tag }}" > /dev/null; then
-            echo "::warning::Version ${{ steps.version.outputs.tag }} is already released (tag ${{ steps.version.outputs.tag }} or v${{ steps.version.outputs.tag }} exists); bump the version in version.json to publish a new release."
+          if git ls-remote --exit-code --tags origin "refs/tags/${{ steps.version.outputs.tag }}" > /dev/null; then
+            echo "::warning::Version ${{ steps.version.outputs.tag }} is already released (tag ${{ steps.version.outputs.tag }} exists); bump the version in version.json to publish a new release."
             echo "exists=true" >> "$GITHUB_OUTPUT"
           else
             echo "exists=false" >> "$GITHUB_OUTPUT"
@@ -75,15 +69,12 @@ jobs:
           .venv/bin/pip install -r requirements.txt
           echo "$GITHUB_WORKSPACE/.venv/bin" >> "$GITHUB_PATH"
 
-      - name: Generate class map
-        if: steps.tag_check.outputs.exists == 'false'
-        run: python -m scripts.generate.class_map
-
       - name: Publish Confluence pages
         if: steps.tag_check.outputs.exists == 'false'
         env:
           CONFLUENCE_USER: ${{ secrets.CONFLUENCE_USER }}
           CONFLUENCE_TOKEN: ${{ secrets.CONFLUENCE_TOKEN }}
+          GH_TOKEN: ${{ secrets.PARSE_AND_DETECT_TOKEN }}
         run: |
           python -m scripts.generate.confluence_pages \
             --confluence-user "$CONFLUENCE_USER" \
@@ -93,13 +84,10 @@ jobs:
         if: steps.tag_check.outputs.exists == 'false'
         run: |
           name="polearms-${{ steps.version.outputs.version }}"
-          # Archive a tree that includes the regenerated class map (git archive HEAD would not).
-          git add mappings/class_map.yaml
-          tree="$(git write-tree)"
           mkdir -p dist
           for format in tar.gz zip; do
-            git archive --format="$format" --prefix="$name/" -o "dist/$name.$format" "$tree"
-            git archive --format="$format" --prefix="$name/" -o "dist/$name-schemaless.$format" "$tree" -- . ':(exclude)schema'
+            git archive --format="$format" --prefix="$name/" -o "dist/$name.$format" HEAD
+            git archive --format="$format" --prefix="$name/" -o "dist/$name-schemaless.$format" HEAD -- . ':(exclude)schema'
           done
 
       - name: Create tag and release

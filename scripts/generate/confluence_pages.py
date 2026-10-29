@@ -9,6 +9,9 @@ For every class config under config/ this builds two pages, in Confluence storag
 and creates or updates them in Confluence, under POLEARMS / <version> / <Class> <version> in the
 personal space of the given user. <version> is the "version" in version.json.
 
+The SWORDS Type column comes from the SWORDS schema (datatype, with [] added for a list), which is
+downloaded to schema/ if it is not already there (see scripts/swords_schema.py).
+
 Usage:
     python3 -m scripts.generate.confluence_pages --confluence-user USER --confluence-token TOKEN
 """
@@ -18,17 +21,16 @@ from __future__ import annotations
 import argparse
 import base64
 import json
-import sys
 import urllib.error
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass
-from pathlib import Path
 
 from scripts.common import (
     CONFIG_DIR,
     MAPPINGS_PATH,
     SCHEMA_PATH,
+    SWORDS_SCHEMA_PATH,
     VERSION_PATH,
     ClassConfig,
     Mapping,
@@ -39,10 +41,8 @@ from scripts.common import (
     load_mappings,
     load_version,
 )
+from scripts.swords_schema import load_swords_schema, swords_type
 
-SWORDS_SCHEMA_PATH = Path(
-    "/workspaces/parse_and_detect/rules/carsers/schemas/carser_swords_schema.json"
-)
 CONFLUENCE_URL = "https://arcticwolf.atlassian.net/wiki"
 
 ROOT_PAGE_TITLE = "POLEARMS"
@@ -56,20 +56,6 @@ def escape_html(text: str) -> str:
     return (
         text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
     )
-
-
-# ---------------------------------------------------------------------------
-# SWORDS schema
-# ---------------------------------------------------------------------------
-
-
-def load_swords_schema(path: Path) -> dict:
-    if not path.is_file():
-        print(f"warning: SWORDS schema not found at {path}; SWORDS types will be blank",
-              file=sys.stderr)
-        return {}
-    with open(path) as handle:
-        return json.load(handle)
 
 
 # ---------------------------------------------------------------------------
@@ -165,11 +151,6 @@ def build_mapping_rows(
             else:
                 mapping_cell = "Direct"
 
-            swords_type = ""
-            info = swords_schema.get(m.swords_field_path())
-            if info:
-                swords_type = info.get("datatype", "") + ("[]" if info.get("is_list") else "")
-
             source_cell = escape_html(source)
             if source == "Override":
                 source_cell = f"<strong>{source_cell}</strong>"
@@ -178,7 +159,7 @@ def build_mapping_rows(
                 polearms_field=display_path(polearms_path, m.labels),
                 join_sep=m.join_separator(),
                 swords=m.display_swords(),
-                swords_type=swords_type,
+                swords_type=swords_type(swords_schema.get(m.swords_field_path())),
                 mapping=mapping_cell,
                 source=source_cell,
                 **schema_columns(attr),

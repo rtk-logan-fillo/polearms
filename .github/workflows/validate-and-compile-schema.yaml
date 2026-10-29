@@ -1,22 +1,20 @@
-name: Compile schema
+name: Validate and compile schema
 
-# Rebuilds schema/schema.json and mappings/class_map.yaml from schema/schema_definition.yaml: it
-# checks out the OCSF schema and the Arctic Wolf extension at the versions named in the definition,
-# compiles them with ocsf-schema-compiler, regenerates the class map from the result, and commits
-# both files to the pull request's branch.
+# Runs on pull requests into main that change anything under schema/. It:
 #
-# Not triggered on its own: pull-request.yaml calls it for every pull request into main. The first
-# thing the job does is check whether schema.json is out of date, i.e. was compiled from different
-# OCSF or Arctic Wolf extension versions than the definition names. If it is current, every later
-# step is skipped and nothing is committed.
+#   1. validates schema/schema_definition.yaml
+#   2. checks whether schema/schema.json is out of date, i.e. was compiled from different OCSF or
+#      Arctic Wolf extension versions than the definition names
+#   3. if it is, compiles schema.json from the definition, regenerates the class map from it, and
+#      commits both to the pull request's branch
+#
+# If schema.json is current, steps 3 onward are skipped and nothing is committed. The commit is
+# pushed with the workflow's own token, which GitHub does not use to start further workflow runs.
 on:
-  workflow_call:
-    outputs:
-      sha:
-        description: >-
-          The commit compile pushed, with the new schema.json. Empty when the schema was already
-          current, so nothing was pushed.
-        value: ${{ jobs.compile.outputs.sha }}
+  pull_request:
+    branches: [main]
+    paths:
+      - "schema/**"
 
 env:
   OCSF_REPO: ocsf/ocsf-schema
@@ -25,11 +23,15 @@ env:
 permissions:
   contents: write
 
+# A newer push to the pull request supersedes the older run. A run that is cancelled while compiling
+# is safe: the commit happens all-or-nothing, in the last step.
+concurrency:
+  group: validate-and-compile-schema-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
 jobs:
-  compile:
+  validate-and-compile:
     runs-on: ubuntu-latest
-    outputs:
-      sha: ${{ steps.commit.outputs.sha }}
     steps:
       # On a pull_request event the default checkout is a detached merge commit, which cannot be pushed
       # to. Check out the pull request's own branch instead.
@@ -48,6 +50,9 @@ jobs:
           python -m venv .venv
           .venv/bin/pip install --quiet --upgrade pip
           .venv/bin/pip install --quiet -r requirements.txt
+
+      - name: Validate the schema definition
+        run: .venv/bin/python -m scripts.validate.schema_definition
 
       - name: Check whether schema.json is out of date
         id: status
@@ -141,7 +146,6 @@ jobs:
 
       - name: Commit the compiled schema and class map
         if: steps.status.outputs.needs_compile == 'true'
-        id: commit
         env:
           # Branch names may contain shell metacharacters, so pass it as data, not into the script text.
           HEAD_REF: ${{ github.head_ref }}
@@ -155,4 +159,3 @@ jobs:
           git add schema/schema.json mappings/class_map.yaml
           git commit -m "Compile schema: OCSF ${{ steps.versions.outputs.ocsf }} + Arctic Wolf extension ${{ steps.versions.outputs.extension }}"
           git push origin "HEAD:$HEAD_REF"
-          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
