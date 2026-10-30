@@ -5,7 +5,7 @@ import pytest
 import yaml
 
 from scripts.common import ROOT
-from scripts.validate import schema_definition as sd
+from scripts import validate_schema_definition as sd
 
 DEFINITION = {"ocsf": {"version": "1.8.0"}, "arcticwolf_extension": {"version": "0.0.0"}}
 
@@ -83,7 +83,7 @@ class TestMain:
 
 class TestRealRepository:
     def test_the_checked_in_definition_is_well_formed(self):
-        result = subprocess.run([sys.executable, "-m", "scripts.validate.schema_definition"],
+        result = subprocess.run([sys.executable, "-m", "scripts.validate_schema_definition"],
                                 cwd=ROOT, capture_output=True, text=True)
         assert result.returncode == 0, result.stdout + result.stderr
         assert result.stdout == "schema definition: ok\n"

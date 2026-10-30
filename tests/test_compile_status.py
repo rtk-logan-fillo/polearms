@@ -6,7 +6,7 @@ import pytest
 import yaml
 
 from scripts.common import ROOT
-from scripts.compile import status as ss
+from scripts import compile_status as ss
 
 DEFINITION = {"ocsf": {"version": "1.8.0"}, "arcticwolf_extension": {"version": "0.0.1"}}
 
@@ -109,7 +109,7 @@ class TestMain:
 
 class TestRealRepository:
     def test_it_runs_on_the_checked_in_files_and_prints_a_decision(self):
-        result = subprocess.run([sys.executable, "-m", "scripts.compile.status"],
+        result = subprocess.run([sys.executable, "-m", "scripts.compile_status"],
                                 cwd=ROOT, capture_output=True, text=True)
         assert result.returncode == 0, result.stderr
         assert result.stdout.strip() in ("needs_compile=true", "needs_compile=false")

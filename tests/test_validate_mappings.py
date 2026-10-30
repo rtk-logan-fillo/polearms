@@ -5,7 +5,7 @@ import pytest
 import yaml
 
 from scripts.common import ROOT, ClassConfig, Mapping
-from scripts.validate import mappings as vm
+from scripts import validate_mappings as vm
 
 FNS = {"map_x", "map_y"}
 SWORDS_SCHEMA = {
@@ -228,6 +228,60 @@ class TestValidPolearmsField:
 
 
 # ---------------------------------------------------------------------------
+# primitive POLEARMS field
+# ---------------------------------------------------------------------------
+
+
+class TestPrimitivePolearmsField:
+    def test_a_primitive_field_is_fine(self, mini_schema):
+        assert vm.validate_primitive_polearms_fields(
+            [Mapping(polearms="owner.email", swords="s")], mini_schema, "widget") == []
+
+    def test_an_object_field_is_an_error(self, mini_schema):
+        issues = vm.validate_primitive_polearms_fields(
+            [Mapping(polearms="owner", swords="s")], mini_schema, "widget")
+        assert steps(issues) == [("primitive-polearms-field", "error")]
+        assert "'owner' is an object" in issues[0].message
+
+    def test_a_nested_object_field_is_an_error(self, mini_schema):
+        issues = vm.validate_primitive_polearms_fields(
+            [Mapping(polearms="owner.address", swords="s")], mini_schema, "widget")
+        assert len(issues) == 1
+
+    def test_an_array_of_objects_is_an_error(self, mini_schema):
+        mini_schema.classes["widget"]["attributes"]["owner"]["is_array"] = True
+        assert len(vm.validate_primitive_polearms_fields(
+            [Mapping(polearms="owner", swords="s")], mini_schema, "widget")) == 1
+
+    def test_an_array_of_primitives_is_fine(self, mini_schema):
+        mini_schema.classes["widget"]["attributes"]["tags"]["is_array"] = True
+        assert vm.validate_primitive_polearms_fields(
+            [Mapping(polearms="tags", swords="s")], mini_schema, "widget") == []
+
+    def test_bracket_segments_are_ignored(self, mini_schema):
+        m = Mapping(polearms="owner[x]", swords="s", labels={"x": "k"})
+        assert len(vm.validate_primitive_polearms_fields([m], mini_schema, "widget")) == 1
+
+    def test_a_missing_field_is_left_to_valid_polearms_field(self, mini_schema):
+        assert vm.validate_primitive_polearms_fields(
+            [Mapping(polearms="bogus", swords="s")], mini_schema, "widget") == []
+
+    def test_every_polearms_path_of_a_many_to_one_is_checked(self, mini_schema):
+        m = Mapping(polearms=["name", "owner", "owner.address"], swords="s", mapper={"fn": "map_x"})
+        assert len(vm.validate_primitive_polearms_fields([m], mini_schema, "widget")) == 2
+
+    def test_with_no_class_an_object_in_any_class_is_an_error(self, mini_schema):
+        mini_schema.classes["gadget"]["attributes"]["owner"] = {
+            "caption": "Owner", "type": "string_t", "requirement": "optional"}
+        assert len(vm.validate_primitive_polearms_fields(
+            [Mapping(polearms="owner", swords="s")], mini_schema, None)) == 1
+
+    def test_with_no_class_a_primitive_everywhere_is_fine(self, mini_schema):
+        assert vm.validate_primitive_polearms_fields(
+            [Mapping(polearms="name", swords="s")], mini_schema, None) == []
+
+
+# ---------------------------------------------------------------------------
 # valid SWORDS field
 # ---------------------------------------------------------------------------
 
@@ -378,6 +432,17 @@ class TestEntryPoints:
         got = {s for s, _ in steps(vm.validate_class_overrides(
             self.config(overrides=overrides), GLOBALS, mini_schema, SWORDS_SCHEMA, FNS, "1"))}
         assert {"valid-polearms-field", "override-relevance"} <= got
+
+    def test_overrides_must_map_primitive_fields(self, mini_schema):
+        overrides = [Mapping(polearms="owner", swords="brand-new")]
+        got = steps(vm.validate_class_overrides(
+            self.config(overrides=overrides), GLOBALS, mini_schema, SWORDS_SCHEMA, FNS, "1"))
+        assert ("primitive-polearms-field", "error") in got
+
+    def test_global_mappings_must_map_primitive_fields(self, mini_schema):
+        got = steps(vm.validate_global_mappings(
+            [Mapping(polearms="owner", swords="s")], mini_schema, SWORDS_SCHEMA, FNS, "1"))
+        assert got == [("primitive-polearms-field", "error")]
 
     def test_overrides_are_checked_against_the_swords_schema(self, mini_schema):
         overrides = [Mapping(polearms="tags", swords="not-in-swords-schema")]
@@ -539,7 +604,7 @@ class TestRealRepository:
     """The data checked into this repo must always validate."""
 
     def test_exits_zero(self):
-        result = subprocess.run([sys.executable, "-m", "scripts.validate.mappings"], cwd=ROOT, capture_output=True, text=True)
+        result = subprocess.run([sys.executable, "-m", "scripts.validate_mappings"], cwd=ROOT, capture_output=True, text=True)
         assert result.returncode == 0, result.stdout + result.stderr
         assert "global mappings: ok" in result.stdout
         assert "ERROR" not in result.stdout

@@ -76,7 +76,7 @@ jobs:
           CONFLUENCE_TOKEN: ${{ secrets.CONFLUENCE_TOKEN }}
           GH_TOKEN: ${{ secrets.PARSE_AND_DETECT_TOKEN }}
         run: |
-          python -m scripts.generate.confluence_pages \
+          python -m scripts.generate_confluence_pages \
             --confluence-user "$CONFLUENCE_USER" \
             --confluence-token "$CONFLUENCE_TOKEN"
 

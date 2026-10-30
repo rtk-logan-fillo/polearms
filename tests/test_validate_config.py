@@ -5,7 +5,7 @@ import pytest
 import yaml
 
 from scripts.common import ROOT
-from scripts.validate import config as vc
+from scripts import validate_config as vc
 
 
 def only(issues):
@@ -203,7 +203,7 @@ class TestMain:
 
 class TestRealRepository:
     def test_every_checked_in_config_is_valid(self):
-        result = subprocess.run([sys.executable, "-m", "scripts.validate.config"], cwd=ROOT, capture_output=True, text=True)
+        result = subprocess.run([sys.executable, "-m", "scripts.validate_config"], cwd=ROOT, capture_output=True, text=True)
         assert result.returncode == 0, result.stdout + result.stderr
         assert "ERROR" not in result.stdout
         assert result.stdout.count(" config: ok") == 5

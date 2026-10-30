@@ -2,7 +2,7 @@
 """Validate every class config under config/ against schema/schema.json.
 
 Steps, by ID:
-    json-schema             the YAML matches its JSON Schema (scripts/validate/schemas/)
+    json-schema             the YAML matches its JSON Schema (scripts/schemas/)
     valid-class-name        class_name is a class in the schema
     valid-class-uid         class_uid is present and equals the schema's uid for that class
     valid-essential-field   every essential field exists in that class
@@ -10,7 +10,7 @@ Steps, by ID:
 Exits 1 if there are any errors.
 
 Usage:
-    python3 -m scripts.validate.config
+    python3 -m scripts.validate_config
 """
 
 from __future__ import annotations
@@ -21,7 +21,7 @@ from pathlib import Path
 import yaml
 
 from scripts.common import CONFIG_DIR, SCHEMA_PATH, OCSFSchema, discover_class_configs
-from scripts.validate.helpers import Issue, error, exit_if_errors, report, validate_against_schema
+from scripts.validate_helpers import Issue, error, exit_if_errors, report, validate_against_schema
 
 STEP_VALID_CLASS_NAME = "valid-class-name"
 STEP_VALID_CLASS_UID = "valid-class-uid"

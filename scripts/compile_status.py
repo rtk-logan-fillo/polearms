@@ -9,7 +9,7 @@ Prints a line such as "needs_compile=true" so that a workflow can append the out
 $GITHUB_OUTPUT, and explains the reason on stderr.
 
 Usage:
-    python3 -m scripts.compile.status >> "$GITHUB_OUTPUT"
+    python3 -m scripts.compile_status >> "$GITHUB_OUTPUT"
 """
 
 from __future__ import annotations

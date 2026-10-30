@@ -52,11 +52,11 @@ jobs:
           .venv/bin/pip install --quiet -r requirements.txt
 
       - name: Validate the schema definition
-        run: .venv/bin/python -m scripts.validate.schema_definition
+        run: .venv/bin/python -m scripts.validate_schema_definition
 
       - name: Check whether schema.json is out of date
         id: status
-        run: .venv/bin/python -m scripts.compile.status >> "$GITHUB_OUTPUT"
+        run: .venv/bin/python -m scripts.compile_status >> "$GITHUB_OUTPUT"
 
       - name: Read versions from schema_definition.yaml
         if: steps.status.outputs.needs_compile == 'true'
@@ -142,7 +142,7 @@ jobs:
         if: steps.status.outputs.needs_compile == 'true'
         run: |
           cp build/schema.json schema/schema.json
-          .venv/bin/python -m scripts.generate.class_map
+          .venv/bin/python -m scripts.generate_class_map
 
       - name: Commit the compiled schema and class map
         if: steps.status.outputs.needs_compile == 'true'

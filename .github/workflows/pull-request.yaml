@@ -36,17 +36,17 @@ jobs:
           echo "$GITHUB_WORKSPACE/.venv/bin" >> "$GITHUB_PATH"
 
       - name: Validate release version
-        run: python -m scripts.validate.release_version
+        run: python -m scripts.validate_release_version
 
       # The SWORDS schema is downloaded from the private parse_and_detect repository, which the
       # workflow's own token cannot read.
       - name: Validate mappings
         env:
           GH_TOKEN: ${{ secrets.PARSE_AND_DETECT_TOKEN }}
-        run: python -m scripts.validate.mappings
+        run: python -m scripts.validate_mappings
 
       - name: Validate config
-        run: python -m scripts.validate.config
+        run: python -m scripts.validate_config
 
       - name: Run tests
         run: python -m pytest

@@ -7,13 +7,13 @@ pre-release suffix such as -dev) is free to differ.
 
 Steps, by ID:
     json-schema             version.json matches its JSON Schema
-                            (scripts/validate/schemas/version.schema.json)
+                            (scripts/schemas/version.schema.json)
     release-version         version.json and arcticwolf_extension.version agree on major.minor
 
 Exits 1 if there are any errors.
 
 Usage:
-    python3 -m scripts.validate.release_version
+    python3 -m scripts.validate_release_version
 """
 
 from __future__ import annotations
@@ -29,7 +29,7 @@ from scripts.common import (
     load_definition,
     load_version,
 )
-from scripts.validate.helpers import Issue, error, exit_if_errors, report, validate_against_schema
+from scripts.validate_helpers import Issue, error, exit_if_errors, report, validate_against_schema
 
 STEP_RELEASE_VERSION = "release-version"
 

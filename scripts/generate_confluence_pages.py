@@ -6,14 +6,15 @@ For every class config under config/ this builds two pages, in Confluence storag
     <Class> <version> - Mappings          every mapped field, with schema info and the SWORDS side
     <Class> <version> - Essential Fields  the class's essential fields, with schema info
 
-and creates or updates them in Confluence, under POLEARMS / <version> / <Class> <version> in the
-personal space of the given user. <version> is the "version" in version.json.
+and creates or updates them in Confluence, under POLEARMS / <version> / <Class> <version>.
+POLEARMS is an existing folder in the MDRP space (BASE_FOLDER_ID); it must already exist and is
+never created or modified. <version> is the "version" in version.json.
 
 The SWORDS Type column comes from the SWORDS schema (datatype, with [] added for a list), which is
 downloaded to schema/ if it is not already there (see scripts/swords_schema.py).
 
 Usage:
-    python3 -m scripts.generate.confluence_pages --confluence-user USER --confluence-token TOKEN
+    python3 -m scripts.generate_confluence_pages --confluence-user USER --confluence-token TOKEN
 """
 
 from __future__ import annotations
@@ -38,6 +39,7 @@ from scripts.common import (
     base_path,
     discover_class_configs,
     display_path,
+    is_object_field,
     load_mappings,
     load_version,
 )
@@ -45,7 +47,9 @@ from scripts.swords_schema import load_swords_schema, swords_type
 
 CONFLUENCE_URL = "https://arcticwolf.atlassian.net/wiki"
 
-ROOT_PAGE_TITLE = "POLEARMS"
+# https://arcticwolf.atlassian.net/wiki/spaces/MDRP/folder/6981780874
+BASE_FOLDER_ID = "6981780874"
+BASE_FOLDER_TITLE = "POLEARMS"
 
 
 # ---------------------------------------------------------------------------
@@ -104,12 +108,20 @@ def filter_mappings_to_essential(mappings: list[Mapping], config: ClassConfig) -
     return kept
 
 
+def polearms_type(attr: dict) -> str:
+    """The attribute's type, with [] added for an array of a primitive type: 'string_t[]'."""
+    type_name = attr.get("type", "")
+    if type_name and not is_object_field(attr) and attr.get("is_array"):
+        return type_name + "[]"
+    return type_name
+
+
 def schema_columns(attr: dict | None) -> dict:
     attr = attr or {}
     return {
         "caption": attr.get("caption", ""),
         "description": attr.get("description", ""),
-        "type_name": attr.get("type", ""),
+        "type_name": polearms_type(attr),
         "requirement": attr.get("requirement", ""),
     }
 
@@ -126,7 +138,7 @@ def build_mapping_rows(
     effective: dict[str, tuple[Mapping, str]] = {}
     for m in mappings:
         if m.has_polearms():
-            effective[m.swords] = (m, "Mapping")
+            effective[m.swords] = (m, "Global")
     for m in overrides:
         if m.has_polearms():
             effective[m.swords] = (m, "Override")
@@ -232,7 +244,7 @@ def build_pages(
 ) -> list[Page]:
     class_info = schema.lookup_class(config.name)
     class_title = f"{class_info['caption']} {version}"
-    hierarchy = [ROOT_PAGE_TITLE, version, class_title]
+    hierarchy = [version, class_title]
     description = f"<p>{class_info['description']}</p>" if class_info.get("description") else ""
 
     mappings, overrides = global_mappings, config.override_mappings
@@ -292,73 +304,81 @@ class ConfluenceClient:
         user = self.request("GET", "/rest/api/user/current")
         return user.get("accountId") or user.get("userKey") or user.get("username", "")
 
-    def personal_space_key(self, account_id: str) -> str:
-        key = "~" + account_id
-        query = urllib.parse.urlencode({"spaceKey": key, "limit": 1})
-        results = self.request("GET", f"/rest/api/space?{query}").get("results", [])
-        return results[0]["key"] if results else key
+    def get_folder(self, folder_id: str) -> dict:
+        return self.request("GET", f"/api/v2/folders/{urllib.parse.quote(folder_id)}")
 
-    def find_page(self, space_key: str, title: str, ancestor_id: str = "") -> dict | None:
-        query = urllib.parse.urlencode({
-            "spaceKey": space_key, "title": title, "type": "page", "expand": "version,ancestors",
-        })
-        for page in self.request("GET", f"/rest/api/content?{query}").get("results", []):
-            if not ancestor_id or any(a["id"] == ancestor_id for a in page.get("ancestors", [])):
-                return page
-        return None
+    def find_page(self, space_id: str, title: str) -> dict | None:
+        """The page with this title in the space (titles are unique per space), or None."""
+        query = urllib.parse.urlencode({"space-id": space_id, "title": title, "limit": 1})
+        results = self.request("GET", f"/api/v2/pages?{query}").get("results", [])
+        return results[0] if results else None
 
-    def create_page(self, space_key: str, parent_id: str, title: str, body: str) -> dict:
-        payload = {
-            "type": "page",
+    def create_page(self, space_id: str, parent_id: str, title: str, body: str) -> dict:
+        return self.request("POST", "/api/v2/pages", {
+            "spaceId": space_id,
+            "status": "current",
             "title": title,
-            "space": {"key": space_key},
-            "body": {"storage": {"value": body, "representation": "storage"}},
-        }
-        if parent_id:
-            payload["ancestors"] = [{"id": parent_id}]
-        return self.request("POST", "/rest/api/content", payload)
+            "parentId": parent_id,
+            "body": {"representation": "storage", "value": body},
+        })
 
     def update_page(self, page_id: str, title: str, body: str, version: int) -> dict:
-        payload = {
-            "type": "page",
+        return self.request("PUT", f"/api/v2/pages/{urllib.parse.quote(page_id)}", {
+            "id": page_id,
+            "status": "current",
             "title": title,
-            "body": {"storage": {"value": body, "representation": "storage"}},
+            "body": {"representation": "storage", "value": body},
             "version": {"number": version},
-        }
-        return self.request("PUT", f"/rest/api/content/{urllib.parse.quote(page_id)}", payload)
+        })
 
-    def find_or_create_page(self, space_key: str, parent_id: str, title: str) -> tuple[dict, bool]:
-        page = self.find_page(space_key, title, parent_id)
-        if page is None and parent_id:
-            page = self.find_page(space_key, title)
-        if page is not None:
-            return page, False
-        return self.create_page(space_key, parent_id, title, ""), True
+    def find_or_create_page(self, space_id: str, parent_id: str, title: str) -> tuple[dict, bool]:
+        """The page titled title under parent_id, created empty if it does not exist.
+
+        Exits if a page with that title exists elsewhere in the space: titles are unique per
+        space, so it cannot be created here, and it is not ours to move or overwrite.
+        """
+        page = self.find_page(space_id, title)
+        if page is None:
+            return self.create_page(space_id, parent_id, title, ""), True
+        if str(page.get("parentId")) != parent_id:
+            raise SystemExit(
+                f"a page titled {title!r} already exists in this space but is not under the "
+                f"expected parent (page id {page['id']}); remove or rename it and retry")
+        return page, False
 
 
 def publish_pages(pages: list[Page], client: ConfluenceClient) -> None:
     print("Authenticating... ", end="", flush=True)
-    account_id = client.current_user()
+    client.current_user()
     print("ok")
-    space_key = client.personal_space_key(account_id)
-    print(f"Publishing to space {space_key}")
+
+    base = client.get_folder(BASE_FOLDER_ID)
+    if base.get("title") != BASE_FOLDER_TITLE:
+        raise SystemExit(
+            f"folder {BASE_FOLDER_ID} is titled {base.get('title')!r}, expected "
+            f"{BASE_FOLDER_TITLE!r}; refusing to publish")
+    space_id = str(base["spaceId"])
+    print(f"Publishing under folder {BASE_FOLDER_TITLE} ({BASE_FOLDER_ID})")
 
     for page in pages:
-        parent_id = ""
+        parent_id = BASE_FOLDER_ID
         for title in page.hierarchy:
-            parent, created = client.find_or_create_page(space_key, parent_id, title)
+            parent, created = client.find_or_create_page(space_id, parent_id, title)
             print(f"  {'Created' if created else 'Found  '} page: {title}")
-            parent_id = parent["id"]
+            parent_id = str(parent["id"])
 
-        existing = client.find_page(space_key, page.title, parent_id) or client.find_page(
-            space_key, page.title)
-        if existing:
-            client.update_page(existing["id"], page.title, page.body,
-                               existing["version"]["number"] + 1)
-            print(f"  Updated page: {page.title} ({page.summary})")
-        else:
-            client.create_page(space_key, parent_id, page.title, page.body)
+        existing = client.find_page(space_id, page.title)
+        if existing is None:
+            client.create_page(space_id, parent_id, page.title, page.body)
             print(f"  Created page: {page.title} ({page.summary})")
+            continue
+        if str(existing.get("parentId")) != parent_id:
+            raise SystemExit(
+                f"a page titled {page.title!r} already exists in this space but is not under "
+                f"the expected parent (page id {existing['id']}); remove or rename it and retry")
+        client.update_page(existing["id"], page.title, page.body,
+                           existing["version"]["number"] + 1)
+        print(f"  Updated page: {page.title} ({page.summary})")
 
 
 # ---------------------------------------------------------------------------

@@ -6,7 +6,7 @@ import pytest
 import yaml
 
 from scripts.common import ROOT
-from scripts.validate import release_version as rv
+from scripts import validate_release_version as rv
 
 
 def definition(extension="1.2.0"):
@@ -148,7 +148,7 @@ class TestMain:
 
 class TestRealRepository:
     def test_the_checked_in_version_tracks_the_extension(self):
-        result = subprocess.run([sys.executable, "-m", "scripts.validate.release_version"],
+        result = subprocess.run([sys.executable, "-m", "scripts.validate_release_version"],
                                 cwd=ROOT, capture_output=True, text=True)
         assert result.returncode == 0, result.stdout + result.stderr
         assert result.stdout == "release version: ok\n"

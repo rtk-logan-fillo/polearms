@@ -154,6 +154,11 @@ def load_version(path: Path) -> str:
     return version.strip()
 
 
+def is_object_field(attr: dict) -> bool:
+    """Whether an OCSF attribute is an object (or an array of objects) rather than a primitive."""
+    return attr.get("type") == "object_t" or "object_type" in attr
+
+
 class OCSFSchema:
     def __init__(self, data: dict):
         self.classes = data["classes"]

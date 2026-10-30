@@ -3,8 +3,9 @@ import sys
 import pytest
 import yaml
 
-from scripts.generate import confluence_pages as gcp
+from scripts import generate_confluence_pages as gcp
 from scripts.common import ClassConfig, Mapping
+from tests.conftest import FOLDER_ID, SPACE_ID
 
 
 def config(**kw):
@@ -96,7 +97,7 @@ class TestBuildMappingRows:
     def test_direct_mapping(self, mini_schema):
         (row,) = rows_for(mini_schema, [Mapping(polearms="name", swords="widget-name")])
         assert (row.polearms_field, row.swords, row.swords_type) == ("name", "widget-name", "string")
-        assert (row.mapping, row.source) == ("Direct", "Mapping")
+        assert (row.mapping, row.source) == ("Direct", "Global")
         assert (row.caption, row.type_name, row.requirement) == ("Name", "string_t", "required")
 
     def test_schema_description_is_kept_as_html(self, mini_schema):
@@ -111,6 +112,26 @@ class TestBuildMappingRows:
         rows = rows_for(mini_schema, [Mapping(polearms=["name", "tags"], swords="s", mapper={"fn": "map_x"})])
         assert [r.polearms_field for r in rows] == ["name", "tags"]
         assert {r.mapping for r in rows} == {"<strong>Complex</strong> (many-to-one)"}
+
+    def test_array_of_a_primitive_type_gets_brackets(self, mini_schema):
+        mini_schema.classes["widget"]["attributes"]["tags"]["is_array"] = True
+        (row,) = rows_for(mini_schema, [Mapping(polearms="tags", swords="s")])
+        assert row.type_name == "string_t[]"
+
+    def test_array_of_objects_keeps_the_plain_type(self, mini_schema):
+        mini_schema.classes["widget"]["attributes"]["owner"]["is_array"] = True
+        (row,) = rows_for(mini_schema, [Mapping(polearms="owner", swords="s")])
+        assert row.type_name == "object_t"
+
+    def test_a_non_array_is_unchanged(self, mini_schema):
+        mini_schema.classes["widget"]["attributes"]["tags"]["is_array"] = False
+        (row,) = rows_for(mini_schema, [Mapping(polearms="tags", swords="s")])
+        assert row.type_name == "string_t"
+
+    def test_unmapped_essential_array_fields_also_get_brackets(self, mini_schema):
+        mini_schema.classes["widget"]["attributes"]["tags"]["is_array"] = True
+        (row,) = rows_for(mini_schema, [], essentials=["tags"])
+        assert row.type_name == "string_t[]"
 
     def test_list_swords_types_get_brackets(self, mini_schema):
         (row,) = rows_for(mini_schema, [Mapping(polearms="tags", swords="owner-tags")])
@@ -236,9 +257,9 @@ class TestBuildPages:
         assert mappings.title == "Widget 3.1.4 - Mappings"
         assert essential.title == "Widget 3.1.4 - Essential Fields"
 
-    def test_hierarchy_is_polearms_then_version_then_class(self, mini_schema):
+    def test_hierarchy_is_version_then_class_below_the_base_folder(self, mini_schema):
         for page in self.build(mini_schema, config()):
-            assert page.hierarchy == ["POLEARMS", "3.1.4", "Widget 3.1.4"]
+            assert page.hierarchy == ["3.1.4", "Widget 3.1.4"]
 
     def test_class_description_is_prepended_as_a_paragraph(self, mini_schema):
         mappings, _ = self.build(mini_schema, config())
@@ -292,45 +313,48 @@ class TestConfluenceClient:
     def test_current_user_prefers_account_id(self, confluence):
         assert client_for(confluence).current_user() == "acct-1"
 
-    def test_personal_space_key(self, confluence):
-        assert client_for(confluence).personal_space_key("acct-1") == "~acct-1"
+    def test_get_folder(self, confluence):
+        folder = client_for(confluence).get_folder(FOLDER_ID)
+        assert (folder["title"], folder["spaceId"]) == ("POLEARMS", SPACE_ID)
+
+    def test_get_folder_that_does_not_exist_exits(self, confluence):
+        with pytest.raises(SystemExit, match="HTTP 404"):
+            client_for(confluence).get_folder("1")
 
     def test_find_page_returns_none_when_absent(self, confluence):
-        assert client_for(confluence).find_page("~acct-1", "Nope") is None
+        assert client_for(confluence).find_page(SPACE_ID, "Nope") is None
 
     def test_create_then_find(self, confluence):
         client = client_for(confluence)
-        created = client.create_page("~acct-1", "", "Title", "<p>x</p>")
-        found = client.find_page("~acct-1", "Title")
+        created = client.create_page(SPACE_ID, FOLDER_ID, "Title", "<p>x</p>")
+        found = client.find_page(SPACE_ID, "Title")
         assert found["id"] == created["id"] and found["version"]["number"] == 1
+        assert found["parentId"] == FOLDER_ID and found["body"] == "<p>x</p>"
 
-    def test_find_page_filters_by_ancestor(self, confluence):
-        client = client_for(confluence)
-        parent = client.create_page("~acct-1", "", "Parent", "")
-        client.create_page("~acct-1", parent["id"], "Child", "")
-        assert client.find_page("~acct-1", "Child", parent["id"]) is not None
-        assert client.find_page("~acct-1", "Child", "999") is None
+    def test_find_page_is_scoped_to_the_space(self, confluence):
+        client_for(confluence).create_page(SPACE_ID, FOLDER_ID, "Title", "")
+        assert client_for(confluence).find_page("other-space", "Title") is None
 
     def test_update_replaces_body_and_version(self, confluence):
         client = client_for(confluence)
-        page = client.create_page("~acct-1", "", "T", "old")
+        page = client.create_page(SPACE_ID, FOLDER_ID, "T", "old")
         client.update_page(page["id"], "T", "new", 2)
         assert confluence.pages[page["id"]]["body"] == "new"
         assert confluence.pages[page["id"]]["version"] == {"number": 2}
 
     def test_find_or_create_creates_once_then_finds(self, confluence):
         client = client_for(confluence)
-        first, created1 = client.find_or_create_page("~acct-1", "", "Root")
-        second, created2 = client.find_or_create_page("~acct-1", "", "Root")
+        first, created1 = client.find_or_create_page(SPACE_ID, FOLDER_ID, "Root")
+        second, created2 = client.find_or_create_page(SPACE_ID, FOLDER_ID, "Root")
         assert (created1, created2) == (True, False)
         assert first["id"] == second["id"]
         assert confluence.titles() == ["Root"]
 
-    def test_find_or_create_falls_back_to_a_page_under_another_parent(self, confluence):
-        client = client_for(confluence)
-        existing = client.create_page("~acct-1", "", "Moved", "")
-        page, created = client.find_or_create_page("~acct-1", "some-parent", "Moved")
-        assert created is False and page["id"] == existing["id"]
+    def test_find_or_create_refuses_a_page_of_that_title_under_another_parent(self, confluence):
+        existing = confluence.add_page("Moved", parent_id=None)
+        with pytest.raises(SystemExit, match=rf"already exists.*not under.*page id {existing['id']}"):
+            client_for(confluence).find_or_create_page(SPACE_ID, FOLDER_ID, "Moved")
+        assert confluence.pages[existing["id"]]["parentId"] is None   # left alone
 
     def test_http_errors_exit_with_the_status_and_body(self, confluence):
         confluence.fail_with = (401, "bad credentials")
@@ -347,9 +371,8 @@ class TestPublishPages:
     def test_creates_the_hierarchy_and_both_pages(self, confluence, mini_schema):
         gcp.publish_pages(sample_pages(mini_schema), client_for(confluence))
         assert confluence.titles() == sorted([
-            "POLEARMS", "1.2.3", "Widget 1.2.3",
+            "1.2.3", "Widget 1.2.3",
             "Widget 1.2.3 - Mappings", "Widget 1.2.3 - Essential Fields"])
-        assert confluence.parent_title("POLEARMS") is None
         assert confluence.parent_title("1.2.3") == "POLEARMS"
         assert confluence.parent_title("Widget 1.2.3") == "1.2.3"
         assert confluence.parent_title("Widget 1.2.3 - Mappings") == "Widget 1.2.3"
@@ -374,15 +397,39 @@ class TestPublishPages:
         client = client_for(confluence)
         gcp.publish_pages(sample_pages(mini_schema, "1.0.0"), client)
         gcp.publish_pages(sample_pages(mini_schema, "2.0.0"), client)
-        titles = confluence.titles()
-        assert titles.count("POLEARMS") == 1
-        assert {"1.0.0", "2.0.0", "Widget 1.0.0 - Mappings", "Widget 2.0.0 - Mappings"} <= set(titles)
+        assert {"1.0.0", "2.0.0", "Widget 1.0.0 - Mappings", "Widget 2.0.0 - Mappings"} <= set(confluence.titles())
+        assert confluence.parent_title("1.0.0") == confluence.parent_title("2.0.0") == "POLEARMS"
 
     def test_prints_progress(self, confluence, mini_schema, capsys):
         gcp.publish_pages(sample_pages(mini_schema), client_for(confluence))
         out = capsys.readouterr().out
-        assert "Authenticating... ok" in out and "Publishing to space ~acct-1" in out
+        assert "Authenticating... ok" in out and "Publishing under folder POLEARMS (6981780874)" in out
         assert "Created page: Widget 1.2.3 - Mappings" in out
+
+    def test_the_base_folder_itself_is_never_modified(self, confluence, mini_schema):
+        gcp.publish_pages(sample_pages(mini_schema), client_for(confluence))
+        assert confluence.folder == {"id": FOLDER_ID, "title": "POLEARMS", "spaceId": SPACE_ID,
+                                     "parentId": None, "parentType": None}
+        assert not any(method != "GET" and FOLDER_ID in path for method, path in confluence.requests)
+
+    def test_a_folder_with_the_wrong_title_aborts_before_writing(self, confluence, mini_schema):
+        confluence.folder["title"] = "Something else"
+        with pytest.raises(SystemExit, match="is titled 'Something else', expected 'POLEARMS'"):
+            gcp.publish_pages(sample_pages(mini_schema), client_for(confluence))
+        assert confluence.pages == {}
+
+    def test_a_missing_base_folder_aborts_before_writing(self, confluence, mini_schema, monkeypatch):
+        monkeypatch.setattr(gcp, "BASE_FOLDER_ID", "111")
+        with pytest.raises(SystemExit, match="HTTP 404"):
+            gcp.publish_pages(sample_pages(mini_schema), client_for(confluence))
+        assert confluence.pages == {}
+
+    def test_does_not_adopt_a_same_titled_page_elsewhere_in_the_space(self, confluence, mini_schema):
+        other = confluence.add_page("Widget 1.2.3 - Mappings", parent_id=None, body="someone else's")
+        with pytest.raises(SystemExit, match="not under the expected parent"):
+            gcp.publish_pages(sample_pages(mini_schema), client_for(confluence))
+        assert confluence.pages[other["id"]]["body"] == "someone else's"
+        assert confluence.pages[other["id"]]["version"] == {"number": 1}
 
     def test_an_api_failure_aborts_the_publish(self, confluence, mini_schema):
         confluence.fail_with = (500, "boom")

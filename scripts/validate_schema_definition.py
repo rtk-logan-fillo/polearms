@@ -7,12 +7,12 @@ builds schema.json from whatever versions this file names.
 
 Steps, by ID:
     json-schema             schema_definition.yaml matches its JSON Schema
-                            (scripts/validate/schemas/schema_definition.schema.json)
+                            (scripts/schemas/schema_definition.schema.json)
 
 Exits 1 if there are any errors.
 
 Usage:
-    python3 -m scripts.validate.schema_definition
+    python3 -m scripts.validate_schema_definition
 """
 
 from __future__ import annotations
@@ -22,7 +22,7 @@ import argparse
 import yaml
 
 from scripts.common import SCHEMA_DEFINITION_PATH
-from scripts.validate.helpers import Issue, exit_if_errors, report, validate_against_schema
+from scripts.validate_helpers import Issue, exit_if_errors, report, validate_against_schema
 
 
 def validate_schema_definition(raw, target: str = "schema_definition.yaml") -> list[Issue]:

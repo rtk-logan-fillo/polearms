@@ -1,6 +1,6 @@
 import pytest
 
-from scripts.validate import helpers as v
+from scripts import validate_helpers as v
 
 
 class TestIssues:

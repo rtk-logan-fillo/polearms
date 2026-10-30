@@ -6,11 +6,12 @@ classes. Each class's override_mappings (config/**/config.yaml) are validated ag
 with the global mappings as context for the override checks.
 
 Steps, by ID:
-    json-schema             the YAML matches its JSON Schema (scripts/validate/schemas/)
+    json-schema             the YAML matches its JSON Schema (scripts/schemas/)
     labels                  every [key] in a path has a labels entry, and every label is used
     mapper-function         the mapper function exists in complex_mappings.py
     valid-polearms-field    the POLEARMS field exists in the schema
-    valid-swords-field      the SWORDS field exists in the SWORDS schema
+    primitive-polearms-field  the POLEARMS field is a primitive, never an object
+    valid-swords-field     the SWORDS field exists in the SWORDS schema
     unique-polearms-field   no (POLEARMS base path, mapper) pair appears twice
     unique-swords-field     no SWORDS field appears twice
     override-relevance      override POLEARMS fields exist for the class
@@ -23,7 +24,7 @@ The SWORDS schema is downloaded to schema/carser_swords_schema.json if it is not
 Exits 1 if there are any errors; warnings alone do not fail the run.
 
 Usage:
-    python3 -m scripts.validate.mappings
+    python3 -m scripts.validate_mappings
 """
 
 from __future__ import annotations
@@ -45,10 +46,11 @@ from scripts.common import (
     Mapping,
     OCSFSchema,
     discover_class_configs,
+    is_object_field,
     load_mappings,
     load_version,
 )
-from scripts.validate.helpers import (  # noqa: F401  (re-exported for callers and tests)
+from scripts.validate_helpers import (  # noqa: F401  (re-exported for callers and tests)
     SEVERITY_ERROR,
     SEVERITY_WARNING,
     Issue,
@@ -63,6 +65,7 @@ from scripts.swords_schema import load_swords_schema
 STEP_LABELS = "labels"
 STEP_MAPPER_FUNCTION = "mapper-function"
 STEP_VALID_POLEARMS_FIELD = "valid-polearms-field"
+STEP_PRIMITIVE_POLEARMS_FIELD = "primitive-polearms-field"
 STEP_VALID_SWORDS_FIELD = "valid-swords-field"
 STEP_UNIQUE_POLEARMS_FIELD = "unique-polearms-field"
 STEP_UNIQUE_SWORDS_FIELD = "unique-swords-field"
@@ -141,6 +144,25 @@ def validate_polearms_fields(
                 issues.append(error(
                     m.display_name(), STEP_VALID_POLEARMS_FIELD,
                     f"{base!r} is not a valid POLEARMS field for {class_desc} in version {version}"))
+    return issues
+
+
+def validate_primitive_polearms_fields(
+    mappings: list[Mapping], schema: OCSFSchema, class_name: str | None,
+) -> list[Issue]:
+    """A POLEARMS base path must be a primitive field, never an object. With no class, a path that
+    is an object in any class that has it is rejected. Paths that don't exist are left to
+    valid-polearms-field."""
+    classes = [class_name] if class_name else list(schema.classes)
+    issues: list[Issue] = []
+    for m in mappings:
+        for base in m.base_paths():
+            attrs = (schema.lookup_field(c, base) for c in classes)
+            if any(a is not None and is_object_field(a) for a in attrs):
+                issues.append(error(
+                    m.display_name(), STEP_PRIMITIVE_POLEARMS_FIELD,
+                    f"{base!r} is an object; a POLEARMS field must be a primitive field "
+                    f"(map one of its child fields instead)"))
     return issues
 
 
@@ -248,6 +270,7 @@ def validate_global_mappings(
     for m in mappings:
         issues += validate_single_mapping(m, mapper_fns)
     issues += validate_polearms_fields(mappings, schema, None, version)
+    issues += validate_primitive_polearms_fields(mappings, schema, None)
     issues += validate_swords_fields(mappings, swords_schema)
     return issues
 
@@ -263,6 +286,7 @@ def validate_class_overrides(
     for m in overrides:
         issues += validate_single_mapping(m, mapper_fns)
     issues += validate_polearms_fields(overrides, schema, config.name, version)
+    issues += validate_primitive_polearms_fields(overrides, schema, config.name)
     issues += validate_swords_fields(overrides, swords_schema)
     issues += validate_override_relevance(overrides, schema, config.name, version)
     issues += validate_override_completeness(overrides, globals_, schema, config.name)
