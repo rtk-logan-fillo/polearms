@@ -11,6 +11,9 @@ Steps, by ID:
     mapper-function         the mapper function exists in complex_mappings.py
     valid-polearms-field    the POLEARMS field exists in the schema
     primitive-polearms-field  the POLEARMS field is a primitive, never an object
+    polearms-field-arrays   every array in the POLEARMS path is written with a labelled [key]
+                            (evidences[x].src_endpoint.ip), and nothing else has brackets; a final
+                            array of primitives may be written with or without one
     valid-swords-field     the SWORDS field exists in the SWORDS schema
     unique-polearms-field   no (POLEARMS base path, mapper) pair appears twice
     unique-swords-field     no SWORDS field appears twice
@@ -45,6 +48,7 @@ from scripts.common import (
     ClassConfig,
     Mapping,
     OCSFSchema,
+    base_path,
     discover_class_configs,
     is_object_field,
     load_mappings,
@@ -66,6 +70,7 @@ STEP_LABELS = "labels"
 STEP_MAPPER_FUNCTION = "mapper-function"
 STEP_VALID_POLEARMS_FIELD = "valid-polearms-field"
 STEP_PRIMITIVE_POLEARMS_FIELD = "primitive-polearms-field"
+STEP_POLEARMS_FIELD_ARRAYS = "polearms-field-arrays"
 STEP_VALID_SWORDS_FIELD = "valid-swords-field"
 STEP_UNIQUE_POLEARMS_FIELD = "unique-polearms-field"
 STEP_UNIQUE_SWORDS_FIELD = "unique-swords-field"
@@ -163,6 +168,41 @@ def validate_primitive_polearms_fields(
                     m.display_name(), STEP_PRIMITIVE_POLEARMS_FIELD,
                     f"{base!r} is an object; a POLEARMS field must be a primitive field "
                     f"(map one of its child fields instead)"))
+    return issues
+
+
+def validate_polearms_field_arrays(
+    mappings: list[Mapping], schema: OCSFSchema, class_name: str | None,
+) -> list[Issue]:
+    """Each array a POLEARMS path passes through needs a labelled bracket, e.g. evidences[x]: a
+    missing bracket, a bare [] and a bracket on something that is not an array are all errors.
+    A final array of primitives may have a bracket or not. With no class, the path is checked
+    against every class that has it. Paths that don't exist are left to valid-polearms-field."""
+    classes = [class_name] if class_name else list(schema.classes)
+    issues: list[Issue] = []
+    for m in mappings:
+        for path in (p for p in m.polearms if p):
+            parts = path.split(".")
+            reported: set[str] = set()
+            for cls in classes:
+                flags = schema.array_segments(cls, base_path(path))
+                if flags is None or len(flags) != len(parts):
+                    continue
+                for part, is_array, last in zip(parts, flags, [False] * (len(parts) - 1) + [True]):
+                    name, bracket = part.split("[", 1)[0], "[" in part
+                    labelled = bracket and part != name + "[]"
+                    if is_array and not labelled and not (last and not bracket):
+                        problem = (f"{name!r} is an array, so it must be written with a labelled "
+                                   f"bracket like {name}[x]" + (" (a bare [] is not enough)" if bracket else ""))
+                    elif bracket and not is_array:
+                        problem = f"{name!r} is not an array, so it must not have brackets"
+                    else:
+                        continue
+                    if problem not in reported:
+                        reported.add(problem)
+                        issues.append(error(
+                            m.display_name(), STEP_POLEARMS_FIELD_ARRAYS,
+                            f"POLEARMS field {path!r}: {problem}"))
     return issues
 
 
@@ -271,6 +311,7 @@ def validate_global_mappings(
         issues += validate_single_mapping(m, mapper_fns)
     issues += validate_polearms_fields(mappings, schema, None, version)
     issues += validate_primitive_polearms_fields(mappings, schema, None)
+    issues += validate_polearms_field_arrays(mappings, schema, None)
     issues += validate_swords_fields(mappings, swords_schema)
     return issues
 
@@ -287,6 +328,7 @@ def validate_class_overrides(
         issues += validate_single_mapping(m, mapper_fns)
     issues += validate_polearms_fields(overrides, schema, config.name, version)
     issues += validate_primitive_polearms_fields(overrides, schema, config.name)
+    issues += validate_polearms_field_arrays(overrides, schema, config.name)
     issues += validate_swords_fields(overrides, swords_schema)
     issues += validate_override_relevance(overrides, schema, config.name, version)
     issues += validate_override_completeness(overrides, globals_, schema, config.name)

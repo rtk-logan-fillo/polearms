@@ -174,6 +174,27 @@ class OCSFSchema:
             raise SystemExit(f"class {class_name!r} not found in schema")
         return self.classes[class_name]
 
+    def array_segments(self, class_name: str, dot_path: str) -> list[bool] | None:
+        """For each dot-separated segment of the path, whether that attribute is an array.
+        None if the path is not a field of the class. [key] suffixes are ignored."""
+        cls = self.classes.get(class_name)
+        if cls is None:
+            return None
+        attrs = cls["attributes"]
+        parts = dot_path.split(".")
+        flags: list[bool] = []
+        for i, part in enumerate(parts):
+            attr = attrs.get(part.split("[", 1)[0])
+            if attr is None:
+                return None
+            flags.append(bool(attr.get("is_array")))
+            if i < len(parts) - 1:
+                obj = self.objects.get(attr.get("object_type", ""))
+                if obj is None:
+                    return None
+                attrs = obj["attributes"]
+        return flags
+
     def lookup_field(self, class_name: str, dot_path: str) -> dict | None:
         cls = self.classes.get(class_name)
         if cls is None:

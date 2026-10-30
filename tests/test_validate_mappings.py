@@ -1,3 +1,4 @@
+import json
 import subprocess
 import sys
 
@@ -282,6 +283,77 @@ class TestPrimitivePolearmsField:
 
 
 # ---------------------------------------------------------------------------
+# POLEARMS field arrays
+# ---------------------------------------------------------------------------
+
+
+class TestPolearmsFieldArrays:
+    @pytest.fixture
+    def schema(self, mini_schema):
+        mini_schema.classes["widget"]["attributes"]["owner"]["is_array"] = True
+        mini_schema.objects["person"]["attributes"]["address"]["is_array"] = True
+        mini_schema.classes["widget"]["attributes"]["tags"]["is_array"] = True
+        return mini_schema
+
+    def check(self, schema, path, labels=None, class_name="widget"):
+        m = Mapping(polearms=path, swords="s", labels=labels or {})
+        return vm.validate_polearms_field_arrays([m], schema, class_name)
+
+    def test_a_labelled_bracket_on_an_array_is_fine(self, schema):
+        assert self.check(schema, "owner[x].email", {"x": "k"}) == []
+
+    def test_every_array_along_the_path_needs_one(self, schema):
+        assert self.check(schema, "owner[x].address[y].city", {"x": "a", "y": "b"}) == []
+        issues = self.check(schema, "owner[x].address.city", {"x": "a"})
+        assert steps(issues) == [("polearms-field-arrays", "error")]
+        assert "'address' is an array" in issues[0].message and "address[x]" in issues[0].message
+
+    def test_a_missing_bracket_is_an_error(self, schema):
+        issues = self.check(schema, "owner.email")
+        assert steps(issues) == [("polearms-field-arrays", "error")]
+        assert "'owner' is an array" in issues[0].message and "owner[x]" in issues[0].message
+
+    def test_a_bare_bracket_is_not_enough(self, schema):
+        issues = self.check(schema, "owner[].email")
+        assert steps(issues) == [("polearms-field-arrays", "error")]
+        assert "a bare [] is not enough" in issues[0].message
+
+    def test_a_bracket_on_a_non_array_is_an_error(self, schema):
+        issues = self.check(schema, "name[x]", {"x": "k"})
+        assert steps(issues) == [("polearms-field-arrays", "error")]
+        assert "'name' is not an array" in issues[0].message
+
+    def test_a_bare_bracket_on_a_non_array_is_an_error(self, schema):
+        assert len(self.check(schema, "owner[x].email[]", {"x": "k"})) == 1
+
+    def test_a_final_array_of_primitives_may_have_a_bracket_or_not(self, schema):
+        assert self.check(schema, "tags") == []
+        assert self.check(schema, "tags[x]", {"x": "k"}) == []
+
+    def test_a_missing_field_is_left_to_valid_polearms_field(self, schema):
+        assert self.check(schema, "nope[x].y", {"x": "k"}) == []
+        assert self.check(schema, "owner.nope") == []
+
+    def test_every_polearms_path_of_a_many_to_one_is_checked(self, schema):
+        m = Mapping(polearms=["name", "owner.email", "owner[].address[y].city"], swords="s",
+                    labels={"y": "k"}, mapper={"fn": "map_x"})
+        assert len(vm.validate_polearms_field_arrays([m], schema, "widget")) == 2
+
+    def test_with_no_class_the_path_is_checked_against_every_class_that_has_it(self, schema):
+        assert len(self.check(schema, "owner.email", class_name=None)) == 1
+        assert self.check(schema, "owner[x].email", {"x": "k"}, class_name=None) == []
+
+    def test_with_no_class_the_same_problem_is_reported_once(self, schema):
+        schema.classes["gadget"]["attributes"]["owner"] = schema.classes["widget"]["attributes"]["owner"]
+        assert len(self.check(schema, "owner.email", class_name=None)) == 1
+
+    def test_a_path_that_is_an_array_in_only_some_classes_is_checked_for_those(self, schema):
+        schema.classes["gadget"]["attributes"]["name"] = {"caption": "N", "type": "string_t", "requirement": "optional"}
+        schema.classes["gadget"]["attributes"]["owner"] = schema.classes["widget"]["attributes"]["owner"]
+        assert len(self.check(schema, "owner.email", class_name=None)) == 1
+
+
+# ---------------------------------------------------------------------------
 # valid SWORDS field
 # ---------------------------------------------------------------------------
 
@@ -433,6 +505,19 @@ class TestEntryPoints:
             self.config(overrides=overrides), GLOBALS, mini_schema, SWORDS_SCHEMA, FNS, "1"))}
         assert {"valid-polearms-field", "override-relevance"} <= got
 
+    def test_overrides_must_write_arrays_with_a_label(self, mini_schema):
+        mini_schema.classes["widget"]["attributes"]["owner"]["is_array"] = True
+        overrides = [Mapping(polearms="owner.email", swords="brand-new")]
+        got = steps(vm.validate_class_overrides(
+            self.config(overrides=overrides), GLOBALS, mini_schema, SWORDS_SCHEMA, FNS, "1"))
+        assert ("polearms-field-arrays", "error") in got
+
+    def test_global_mappings_must_write_arrays_with_a_label(self, mini_schema):
+        mini_schema.classes["widget"]["attributes"]["owner"]["is_array"] = True
+        got = steps(vm.validate_global_mappings(
+            [Mapping(polearms="owner.email", swords="s")], mini_schema, SWORDS_SCHEMA, FNS, "1"))
+        assert got == [("polearms-field-arrays", "error")]
+
     def test_overrides_must_map_primitive_fields(self, mini_schema):
         overrides = [Mapping(polearms="owner", swords="brand-new")]
         got = steps(vm.validate_class_overrides(
@@ -517,6 +602,9 @@ class TestMain:
         assert "widget override mappings: " in capsys.readouterr().out
 
     def test_warnings_alone_do_not_fail(self, project, capsys):
+        schema = json.loads(project.schema.read_text())
+        schema["classes"]["widget"]["attributes"]["owner"]["is_array"] = True
+        project.schema.write_text(json.dumps(schema))
         project.mappings.write_text(yaml.safe_dump({"mappings": [
             {"polearms": "owner[x].email", "swords": "owner-email", "labels": {"x": "a"},
              "mapper": {"fn": "map_x"}}]}))

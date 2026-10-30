@@ -1,6 +1,66 @@
 class_name: detection_finding
 class_uid: 2004
-essential_fields: []
+essential_fields:
+  - polearms: activity_id
+  - polearms: activity_name
+  - polearms: actor.app_name
+  - polearms: actor.user.email_addr
+  - polearms: actor.user.name
+  - polearms: actor.user.type
+  - polearms: actor.user.uid
+  - polearms: arcticwolf.customer.id
+  - polearms: arcticwolf.customer.uuid
+  - polearms: arcticwolf.deployment.id
+  - polearms: arcticwolf.deployment.uuid
+  - polearms: arcticwolf.ingestion_service.endpoint.name
+  - polearms: attacks[].sub_technique.src_url
+  - polearms: attacks[].tactic.name
+  - polearms: attacks[].tactic.src_url
+  - polearms: attacks[].tactic.uid
+  - polearms: attacks[].technique.name
+  - polearms: attacks[].technique.src_url
+  - polearms: attacks[].technique.uid
+  - polearms: class_uid
+  - polearms: device.type
+  - polearms: disposition
+  - polearms: evidences[].dst_endpoint.hostname
+  - polearms: evidences[].dst_endpoint.ip
+  - polearms: evidences[].dst_endpoint.port
+  - polearms: evidences[].dst_endpoint.proxy_endpoint.ip
+  - polearms: evidences[].http_request.http_method
+  - polearms: evidences[].http_request.length
+  - polearms: evidences[].http_request.referrer
+  - polearms: evidences[].http_request.uid
+  - polearms: evidences[].http_request.url.path
+  - polearms: evidences[].http_request.url.scheme
+  - polearms: evidences[].http_request.url.url_string
+  - polearms: evidences[].http_request.user_agent
+  - polearms: evidences[].http_response.body_length
+  - polearms: evidences[].http_response.code
+  - polearms: evidences[].resources[].hostname
+  - polearms: evidences[].src_endpoint.ip
+  - polearms: evidences[].src_endpoint.location.city
+  - polearms: evidences[].src_endpoint.location.country
+  - polearms: evidences[].src_endpoint.location.lat
+  - polearms: evidences[].src_endpoint.location.long
+  - polearms: evidences[].src_endpoint.port
+  - polearms: evidences[].tls.certificate.fingerprints[].value
+  - polearms: firewall_rule.desc
+  - polearms: firewall_rule.match_location
+  - polearms: firewall_rule.name
+  - polearms: firewall_rule.type
+  - polearms: firewall_rule.uid
+  - polearms: malware_scan_info.size
+  - polearms: malware_scan_info.type
+  - polearms: message
+  - polearms: metadata.log_level
+  - polearms: metadata.log_name
+  - polearms: metadata.log_source
+  - polearms: metadata.source
+  - polearms: metadata.tenant_uid
+  - polearms: severity_id
+  - polearms: status
+  - polearms: time
 
 override_mappings:
   - polearms: evidences[x].src_endpoint.ip

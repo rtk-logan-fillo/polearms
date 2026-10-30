@@ -115,7 +115,46 @@ class TestEssentialFields:
         assert [i.message.split("'")[1] for i in issues] == ["bad1", "owner.nope"]
 
     def test_bracket_notation_resolves_like_the_mappings_do(self, mini_schema):
+        mini_schema.classes["widget"]["attributes"]["owner"]["is_array"] = True
         assert validate(mini_schema, essential_fields=[{"polearms": "owner[].email"}]) == []
+
+    def test_the_message_says_how_to_write_the_array(self, mini_schema):
+        mini_schema.objects["person"]["attributes"]["address"]["is_array"] = True
+        issue = only(validate(mini_schema, essential_fields=[{"polearms": "owner.address.city"}]))
+        assert issue.step == "essential-field-arrays"
+        assert "'owner.address.city' must be written 'owner.address[].city'" in issue.message
+
+    def test_an_array_in_the_middle_of_the_path_needs_brackets(self, mini_schema):
+        mini_schema.classes["widget"]["attributes"]["owner"]["is_array"] = True
+        assert only(validate(mini_schema, essential_fields=[{"polearms": "owner.email"}])).step == "essential-field-arrays"
+        assert validate(mini_schema, essential_fields=[{"polearms": "owner[].email"}]) == []
+
+    def test_every_array_along_the_path_needs_brackets(self, mini_schema):
+        mini_schema.classes["widget"]["attributes"]["owner"]["is_array"] = True
+        mini_schema.objects["person"]["attributes"]["address"]["is_array"] = True
+        issue = only(validate(mini_schema, essential_fields=[{"polearms": "owner[].address.city"}]))
+        assert "must be written 'owner[].address[].city'" in issue.message
+        assert validate(mini_schema, essential_fields=[{"polearms": "owner[].address[].city"}]) == []
+
+    def test_brackets_on_something_that_is_not_an_array_are_rejected(self, mini_schema):
+        issue = only(validate(mini_schema, essential_fields=[{"polearms": "owner[].email"}]))
+        assert issue.step == "essential-field-arrays"
+        assert "must be written 'owner.email'" in issue.message
+
+    def test_a_final_array_of_primitives_may_be_written_either_way(self, mini_schema):
+        mini_schema.classes["widget"]["attributes"]["tags"]["is_array"] = True
+        assert validate(mini_schema, essential_fields=[{"polearms": "tags"}]) == []
+        assert validate(mini_schema, essential_fields=[{"polearms": "tags[]"}]) == []
+
+    def test_a_final_non_array_may_not_have_brackets(self, mini_schema):
+        assert only(validate(mini_schema, essential_fields=[{"polearms": "name[]"}])).step == "essential-field-arrays"
+
+    def test_a_missing_field_is_not_also_reported_for_its_brackets(self, mini_schema):
+        assert [i.step for i in validate(mini_schema, essential_fields=[{"polearms": "nope.x"}])] == ["valid-essential-field"]
+
+    def test_a_labelled_bracket_is_not_the_empty_form(self, mini_schema):
+        mini_schema.classes["widget"]["attributes"]["owner"]["is_array"] = True
+        assert only(validate(mini_schema, essential_fields=[{"polearms": "owner[x].email"}])).step == "essential-field-arrays"
 
     def test_expected_flag_is_allowed(self, mini_schema):
         assert validate(mini_schema, essential_fields=[{"polearms": "name", "expected": True}]) == []

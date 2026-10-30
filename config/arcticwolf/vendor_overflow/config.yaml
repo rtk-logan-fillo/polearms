@@ -5,8 +5,8 @@ essential_fields:
   - polearms: actor.app_name
   - polearms: actor.user.name
   - polearms: actor.user.email_addr
-  - polearms: actor.user.programmatic_credentials.type
-  - polearms: actor.user.programmatic_credentials.uid
+  - polearms: actor.user.programmatic_credentials[].type
+  - polearms: actor.user.programmatic_credentials[].uid
   - polearms: actor.user.type
   - polearms: actor.user.type_id
   - polearms: actor.user.uid
@@ -51,9 +51,9 @@ essential_fields:
   - polearms: metadata.product.uid
   - polearms: metadata.type
   - polearms: metadata.version
-  - polearms: policies.data
-  - polearms: policies.type
-  - polearms: policies.uid
+  - polearms: policies[].data
+  - polearms: policies[].type
+  - polearms: policies[].uid
   - polearms: severity
   - polearms: severity_id
   - polearms: src_endpoint.ip
@@ -61,8 +61,8 @@ essential_fields:
   - polearms: type_name
   - polearms: type_uid
   - polearms: user.name
-  - polearms: user.account.tags.name
-  - polearms: user.account.tags.value
+  - polearms: user.account.tags[].name
+  - polearms: user.account.tags[].value
   - polearms: user.email_addr
   - polearms: user.uid
   - polearms: user_result.email_addr
