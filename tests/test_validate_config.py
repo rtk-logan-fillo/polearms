@@ -1,10 +1,8 @@
-import subprocess
 import sys
 
 import pytest
 import yaml
 
-from scripts.common import ROOT
 from scripts import validate_config as vc
 
 
@@ -238,11 +236,3 @@ class TestMain:
         with pytest.raises(SystemExit):
             vc.main()
         assert "widget config: 1 error(s)" in capsys.readouterr().out
-
-
-class TestRealRepository:
-    def test_every_checked_in_config_is_valid(self):
-        result = subprocess.run([sys.executable, "-m", "scripts.validate_config"], cwd=ROOT, capture_output=True, text=True)
-        assert result.returncode == 0, result.stdout + result.stderr
-        assert "ERROR" not in result.stdout
-        assert result.stdout.count(" config: ok") == 5

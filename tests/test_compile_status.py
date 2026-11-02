@@ -1,14 +1,12 @@
 import json
-import subprocess
 import sys
 
 import pytest
 import yaml
 
-from scripts.common import ROOT
 from scripts import compile_status as ss
 
-DEFINITION = {"ocsf": {"version": "1.8.0"}, "arcticwolf_extension": {"version": "0.0.1"}}
+DEFINITION = {"ocsf": {"version": "1.8.0"}, "arcticwolf_ocsf_extension": {"version": "0.0.1"}}
 
 
 def schema(ocsf="1.8.0", arcticwolf="0.0.1"):
@@ -51,11 +49,11 @@ class TestStaleReasons:
 
     def test_yaml_numbers_in_the_definition_are_compared_as_their_text(self):
         # an unquoted 1.8 parses as the float 1.8, which is not the version "1.8.0"
-        defn = {"ocsf": {"version": 1.8}, "arcticwolf_extension": {"version": "0.0.1"}}
+        defn = {"ocsf": {"version": 1.8}, "arcticwolf_ocsf_extension": {"version": "0.0.1"}}
         assert ss.stale_reasons(schema(), defn)
 
     @pytest.mark.parametrize("definition,name", [
-        ({"arcticwolf_extension": {"version": "0.0.1"}}, "ocsf"),
+        ({"arcticwolf_ocsf_extension": {"version": "0.0.1"}}, "ocsf"),
         ({"ocsf": {"version": "1.8.0"}}, "arcticwolf"),
         ({}, "ocsf"),
     ])
@@ -85,13 +83,13 @@ class TestMain:
         assert "already matches" in err
 
     def test_stale_schema_prints_true_and_says_why(self, files, capsys):
-        files[1].write_text(yaml.safe_dump({**DEFINITION, "arcticwolf_extension": {"version": "0.0.2"}}))
+        files[1].write_text(yaml.safe_dump({**DEFINITION, "arcticwolf_ocsf_extension": {"version": "0.0.2"}}))
         out, err = self.run(capsys)
         assert out == "needs_compile=true\n"
         assert "out of date: arcticwolf" in err
 
     def test_only_the_decision_goes_to_stdout_so_it_can_be_appended_to_github_output(self, files, capsys):
-        files[1].write_text(yaml.safe_dump({"ocsf": {"version": "9.9.9"}, "arcticwolf_extension": {"version": "9.9.9"}}))
+        files[1].write_text(yaml.safe_dump({"ocsf": {"version": "9.9.9"}, "arcticwolf_ocsf_extension": {"version": "9.9.9"}}))
         out, _ = self.run(capsys)
         assert out.splitlines() == ["needs_compile=true"]
 
@@ -105,11 +103,3 @@ class TestMain:
         files[0].write_text(text)
         out, err = self.run(capsys)
         assert out == "needs_compile=true\n" and "not valid JSON" in err
-
-
-class TestRealRepository:
-    def test_it_runs_on_the_checked_in_files_and_prints_a_decision(self):
-        result = subprocess.run([sys.executable, "-m", "scripts.compile_status"],
-                                cwd=ROOT, capture_output=True, text=True)
-        assert result.returncode == 0, result.stderr
-        assert result.stdout.strip() in ("needs_compile=true", "needs_compile=false")

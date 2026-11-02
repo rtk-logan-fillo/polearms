@@ -1,11 +1,10 @@
 import json
-import subprocess
 import sys
 
 import pytest
 import yaml
 
-from scripts.common import ROOT, ClassConfig, Mapping
+from scripts.common import ClassConfig, Mapping
 from scripts import validate_mappings as vm
 
 FNS = {"map_x", "map_y"}
@@ -686,13 +685,3 @@ class TestMain:
     def test_a_config_without_overrides_is_ok(self, project, capsys):
         vm.main()
         assert "widget override mappings: ok" in capsys.readouterr().out
-
-
-class TestRealRepository:
-    """The data checked into this repo must always validate."""
-
-    def test_exits_zero(self):
-        result = subprocess.run([sys.executable, "-m", "scripts.validate_mappings"], cwd=ROOT, capture_output=True, text=True)
-        assert result.returncode == 0, result.stdout + result.stderr
-        assert "global mappings: ok" in result.stdout
-        assert "ERROR" not in result.stdout

@@ -154,6 +154,13 @@ def load_version(path: Path) -> str:
     return version.strip()
 
 
+@dataclass(frozen=True)
+class Constraint:
+    """A constraint (at_least_one, just_one) on a group of fields; members are full field paths."""
+    kind: str
+    members: tuple[str, ...]
+
+
 def is_object_field(attr: dict) -> bool:
     """Whether an OCSF attribute is an object (or an array of objects) rather than a primitive."""
     return attr.get("type") == "object_t" or "object_type" in attr
@@ -194,6 +201,42 @@ class OCSFSchema:
                     return None
                 attrs = obj["attributes"]
         return flags
+
+    def field_constraints(self, class_name: str, dot_path: str) -> list[Constraint]:
+        """The constraints the path's last attribute takes part in, with each member written as a
+        full field path: for actor.user.name, the user object's [account, name, uid] become
+        actor.user.account, actor.user.name, actor.user.uid.
+
+        Constraints belong to the class or object that owns the attribute, and name that owner's
+        attributes. [key] suffixes are ignored.
+        """
+        cls = self.classes.get(class_name)
+        if cls is None:
+            return []
+        owner, attrs = cls, cls["attributes"]
+        parts = [part.split("[", 1)[0] for part in dot_path.split(".")]
+        for i, name in enumerate(parts):
+            attr = attrs.get(name)
+            if attr is None:
+                return []
+            if i == len(parts) - 1:
+                prefix = "".join(f"{p}." for p in parts[:-1])
+                found = self._constraints_naming(owner, prefix, name)
+                if owner is not cls:
+                    # A class constraint can name a nested field by its full path.
+                    found += self._constraints_naming(cls, "", ".".join(parts))
+                return found
+            owner = self.objects.get(attr.get("object_type", ""))
+            if owner is None:
+                return []
+            attrs = owner["attributes"]
+        return []
+
+    @staticmethod
+    def _constraints_naming(owner: dict, prefix: str, member: str) -> list[Constraint]:
+        return [Constraint(kind, tuple(prefix + m for m in members))
+                for kind, members in (owner.get("constraints") or {}).items()
+                if member in members]
 
     def lookup_field(self, class_name: str, dot_path: str) -> dict | None:
         cls = self.classes.get(class_name)

@@ -34,6 +34,7 @@ from scripts.common import (
     SWORDS_SCHEMA_PATH,
     VERSION_PATH,
     ClassConfig,
+    Constraint,
     Mapping,
     OCSFSchema,
     base_path,
@@ -116,13 +117,21 @@ def polearms_type(attr: dict) -> str:
     return type_name
 
 
-def schema_columns(attr: dict | None) -> dict:
+def requirement_text(attr: dict, constraints: list[Constraint]) -> str:
+    """The schema's requirement, marked "conditionally required" if the field is in a constraint."""
+    base = attr.get("requirement", "")
+    if not constraints:
+        return base
+    return f"{base} (conditionally required)" if base else "conditionally required"
+
+
+def schema_columns(attr: dict | None, constraints: list[Constraint] = ()) -> dict:
     attr = attr or {}
     return {
         "caption": attr.get("caption", ""),
         "description": attr.get("description", ""),
         "type_name": polearms_type(attr),
-        "requirement": attr.get("requirement", ""),
+        "requirement": requirement_text(attr, constraints),
     }
 
 
@@ -174,12 +183,13 @@ def build_mapping_rows(
                 swords_type=swords_type(swords_schema.get(m.swords_field_path())),
                 mapping=mapping_cell,
                 source=source_cell,
-                **schema_columns(attr),
+                **schema_columns(attr, schema.field_constraints(class_name, field_path)),
             ))
 
     # Essential fields with no mapping still get a row, with the SWORDS columns blank.
     for name in sorted(n for n in essential_names if base_path(n) not in covered):
-        rows.append(Row(polearms_field=name, **schema_columns(schema.lookup_field(class_name, name))))
+        rows.append(Row(polearms_field=name, **schema_columns(
+            schema.lookup_field(class_name, name), schema.field_constraints(class_name, name))))
 
     rows.sort(key=lambda r: (r.polearms_field, r.swords))
     return rows

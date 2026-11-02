@@ -254,5 +254,53 @@ class TestOCSFSchema:
     def test_lookup_field_in_unknown_class(self, mini_schema):
         assert mini_schema.lookup_field("nope", "name") is None
 
+    def test_field_constraints_come_from_the_object_that_owns_the_field(self, mini_schema):
+        mini_schema.objects["person"]["constraints"] = {"at_least_one": ["email", "address"]}
+        expected = [pc.Constraint("at_least_one", ("owner.email", "owner.address"))]
+        assert mini_schema.field_constraints("widget", "owner.email") == expected
+        assert mini_schema.field_constraints("widget", "owner[x].email") == expected
+
+    def test_members_are_full_paths_through_every_parent_object(self, mini_schema):
+        mini_schema.objects["address"]["constraints"] = {"at_least_one": ["city", "zip"]}
+        mini_schema.objects["address"]["attributes"]["zip"] = {"caption": "Zip", "type": "string_t"}
+        assert mini_schema.field_constraints("widget", "owner.address.city") == [
+            pc.Constraint("at_least_one", ("owner.address.city", "owner.address.zip"))]
+
+    def test_a_field_outside_its_owners_constraint_has_none(self, mini_schema):
+        mini_schema.objects["person"]["constraints"] = {"at_least_one": ["email"]}
+        assert mini_schema.field_constraints("widget", "owner.address") == []
+
+    def test_class_level_constraints_apply_to_top_level_fields(self, mini_schema):
+        mini_schema.classes["widget"]["constraints"] = {"just_one": ["name", "tags"]}
+        assert mini_schema.field_constraints("widget", "tags") == [
+            pc.Constraint("just_one", ("name", "tags"))]
+
+    def test_an_object_constraint_does_not_apply_to_a_same_named_field_elsewhere(self, mini_schema):
+        mini_schema.objects["person"]["constraints"] = {"at_least_one": ["email"]}
+        assert mini_schema.field_constraints("widget", "name") == []
+
+    def test_a_class_constraint_can_name_a_nested_field_by_its_path(self, mini_schema):
+        mini_schema.classes["widget"]["constraints"] = {"at_least_one": ["owner.email", "name"]}
+        assert mini_schema.field_constraints("widget", "owner.email") == [
+            pc.Constraint("at_least_one", ("owner.email", "name"))]
+
+    def test_every_constraint_a_field_is_in_is_returned(self, mini_schema):
+        mini_schema.classes["widget"]["constraints"] = {"at_least_one": ["name", "tags"], "just_one": ["name", "owner"]}
+        assert [c.kind for c in mini_schema.field_constraints("widget", "name")] == ["at_least_one", "just_one"]
+
+    def test_object_and_class_constraints_are_both_returned_for_a_nested_field(self, mini_schema):
+        mini_schema.objects["person"]["constraints"] = {"at_least_one": ["email", "address"]}
+        mini_schema.classes["widget"]["constraints"] = {"at_least_one": ["owner.email", "name"]}
+        got = mini_schema.field_constraints("widget", "owner.email")
+        assert [c.members for c in got] == [("owner.email", "owner.address"), ("owner.email", "name")]
+
+    @pytest.mark.parametrize("path", ["nope", "owner.nope", "name.child", ""])
+    def test_field_constraints_of_an_invalid_path_are_empty(self, mini_schema, path):
+        mini_schema.classes["widget"]["constraints"] = {"at_least_one": ["name"]}
+        assert mini_schema.field_constraints("widget", path) == []
+
+    def test_field_constraints_in_unknown_class(self, mini_schema):
+        assert mini_schema.field_constraints("nope", "name") == []
+
     def test_load_from_file(self, fake_project):
         assert pc.OCSFSchema.load(fake_project.schema).lookup_class("gadget")["uid"] == 2

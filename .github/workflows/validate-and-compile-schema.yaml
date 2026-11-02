@@ -65,7 +65,7 @@ jobs:
           .venv/bin/python - <<'EOF' >> "$GITHUB_OUTPUT"
           import re, sys, yaml
           definition = yaml.safe_load(open("schema/schema_definition.yaml"))
-          for key, section in (("ocsf", "ocsf"), ("extension", "arcticwolf_extension")):
+          for key, section in (("ocsf", "ocsf"), ("extension", "arcticwolf_ocsf_extension")):
               version = str((definition.get(section) or {}).get("version") or "")
               if not re.fullmatch(r"\d+\.\d+\.\d+", version):
                   sys.exit(f"::error file=schema/schema_definition.yaml::{section}.version {version!r} is not a semantic version")

@@ -1,4 +1,4 @@
 ocsf:
   version: "1.8.0"
-arcticwolf_extension:
+arcticwolf_ocsf_extension:
   version: "0.0.2"

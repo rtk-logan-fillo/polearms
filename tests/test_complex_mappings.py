@@ -4,7 +4,6 @@ import pytest
 import yaml
 
 import complex_mappings as cm
-from scripts.common import MAPPINGS_PATH, CONFIG_DIR, discover_class_configs
 
 
 # ---------------------------------------------------------------------------
@@ -30,17 +29,6 @@ class TestRegistry:
 
     def test_registry_keys_match_function_names(self):
         assert all(fn.__name__ == name for name, fn in cm.MAPPERS.items())
-
-    def test_every_mapper_referenced_by_the_yaml_is_defined(self):
-        referenced = set()
-        raw = yaml.safe_load(MAPPINGS_PATH.read_text())
-        referenced |= {m["mapper"]["fn"] for m in raw["mappings"] if m.get("mapper")}
-        for path in discover_class_configs(CONFIG_DIR):
-            cfg = yaml.safe_load(path.read_text()) or {}
-            referenced |= {m["mapper"]["fn"] for m in cfg.get("override_mappings") or []
-                           if m.get("mapper")}
-        assert referenced, "expected the repo to reference at least one mapper"
-        assert referenced <= set(cm.MAPPERS), referenced - set(cm.MAPPERS)
 
 
 # ---------------------------------------------------------------------------

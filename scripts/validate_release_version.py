@@ -2,13 +2,13 @@
 """Validate that the version being released (version.json) tracks the Arctic Wolf extension.
 
 version.json is checked against its JSON Schema first. Its version's major and minor must then equal
-those of arcticwolf_extension.version in schema/schema_definition.yaml. The patch part (and any
+those of arcticwolf_ocsf_extension.version in schema/schema_definition.yaml. The patch part (and any
 pre-release suffix such as -dev) is free to differ.
 
 Steps, by ID:
     json-schema             version.json matches its JSON Schema
                             (scripts/schemas/version.schema.json)
-    release-version         version.json and arcticwolf_extension.version agree on major.minor
+    release-version         version.json and arcticwolf_ocsf_extension.version agree on major.minor
 
 Exits 1 if there are any errors.
 
@@ -44,24 +44,24 @@ def major_minor(version: str) -> tuple[int, int] | None:
 
 def validate_release_version(version: str, definition: dict) -> list[Issue]:
     target = "version.json"
-    extension = definition_version(definition, "arcticwolf_extension")
+    extension = definition_version(definition, "arcticwolf_ocsf_extension")
     if extension is None:
         return [error(target, STEP_RELEASE_VERSION,
-                      "schema_definition.yaml arcticwolf_extension.version is not set")]
+                      "schema_definition.yaml arcticwolf_ocsf_extension.version is not set")]
 
     release, tracked = major_minor(version), major_minor(extension)
     if release is None:
         return [error(target, STEP_RELEASE_VERSION, f"version.json version {version!r} is not a semantic version")]
     if tracked is None:
         return [error(target, STEP_RELEASE_VERSION,
-                      f"schema_definition.yaml arcticwolf_extension.version {extension!r} "
+                      f"schema_definition.yaml arcticwolf_ocsf_extension.version {extension!r} "
                       "is not a semantic version")]
 
     if release != tracked:
         return [error(
             target, STEP_RELEASE_VERSION,
             f"version.json version {version!r} has major.minor {release[0]}.{release[1]}, but "
-            f"schema_definition.yaml arcticwolf_extension.version {extension!r} has "
+            f"schema_definition.yaml arcticwolf_ocsf_extension.version {extension!r} has "
             f"{tracked[0]}.{tracked[1]}; they must match")]
     return []
 

@@ -37,7 +37,7 @@ def stale_reasons(schema: dict, definition: dict) -> list[str]:
     """Why schema.json is out of date with the definition; empty if it is current."""
     wanted = {
         "ocsf": definition_version(definition, "ocsf"),
-        "arcticwolf": definition_version(definition, "arcticwolf_extension"),
+        "arcticwolf": definition_version(definition, "arcticwolf_ocsf_extension"),
     }
     have = compiled_versions(schema)
     reasons = []

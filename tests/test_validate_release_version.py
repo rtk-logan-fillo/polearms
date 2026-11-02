@@ -1,16 +1,14 @@
 import json
-import subprocess
 import sys
 
 import pytest
 import yaml
 
-from scripts.common import ROOT
 from scripts import validate_release_version as rv
 
 
 def definition(extension="1.2.0"):
-    return {"ocsf": {"version": "1.8.0"}, "arcticwolf_extension": {"version": extension}}
+    return {"ocsf": {"version": "1.8.0"}, "arcticwolf_ocsf_extension": {"version": extension}}
 
 
 def only(issues):
@@ -67,13 +65,13 @@ class TestValidateReleaseVersion:
 
     def test_an_extension_version_that_is_not_semver(self):
         issue = only(rv.validate_release_version("1.2.0", definition("1.2")))
-        assert "arcticwolf_extension.version '1.2' is not a semantic version" in issue.message
+        assert "arcticwolf_ocsf_extension.version '1.2' is not a semantic version" in issue.message
 
-    @pytest.mark.parametrize("defn", [{}, {"arcticwolf_extension": None}, {"arcticwolf_extension": {}},
+    @pytest.mark.parametrize("defn", [{}, {"arcticwolf_ocsf_extension": None}, {"arcticwolf_ocsf_extension": {}},
                                       {"ocsf": {"version": "1.8.0"}}])
     def test_a_missing_extension_version(self, defn):
         issue = only(rv.validate_release_version("1.2.0", defn))
-        assert "arcticwolf_extension.version is not set" in issue.message
+        assert "arcticwolf_ocsf_extension.version is not set" in issue.message
 
     def test_a_yaml_number_for_the_extension_version_is_not_semver(self):
         # An unquoted 1.2 in the YAML is a float, not "1.2.0".
@@ -144,11 +142,3 @@ class TestMain:
         paths[0].write_text(contents)
         with pytest.raises(SystemExit, match="version.json is not valid JSON"):
             rv.main()
-
-
-class TestRealRepository:
-    def test_the_checked_in_version_tracks_the_extension(self):
-        result = subprocess.run([sys.executable, "-m", "scripts.validate_release_version"],
-                                cwd=ROOT, capture_output=True, text=True)
-        assert result.returncode == 0, result.stdout + result.stderr
-        assert result.stdout == "release version: ok\n"

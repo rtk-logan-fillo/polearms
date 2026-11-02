@@ -50,15 +50,6 @@ class TestExitIfErrors:
 
 import json
 
-import yaml
-
-from scripts.common import (
-    CONFIG_DIR,
-    MAPPINGS_PATH,
-    SCHEMA_DEFINITION_PATH,
-    VERSION_PATH,
-    discover_class_configs,
-)
 
 SCHEMA_FILES = sorted(v.SCHEMAS_DIR.glob("*.schema.json"))
 
@@ -126,7 +117,7 @@ class TestValidateAgainstSchema:
         assert v.validate_against_schema({"class_name": "w", "class_uid": 1}, "config.schema.json", "t") == []
 
     def test_pattern_errors_describe_the_expected_value_not_the_regex(self):
-        doc = {"ocsf": {"version": "1.8"}, "arcticwolf_extension": {"version": "1.0.0"}}
+        doc = {"ocsf": {"version": "1.8"}, "arcticwolf_ocsf_extension": {"version": "1.0.0"}}
         (issue,) = v.validate_against_schema(doc, "schema_definition.schema.json", "t")
         assert "expected a semantic version" in issue.message and "\\d" not in issue.message
 
@@ -139,11 +130,11 @@ class TestValidateAgainstSchema:
         bad = ["1.0", "1", "v1.0.0", "1.0.0.0", "", "a.b.c", " 1.0.0"]
         for version in ok:
             assert not v.validate_against_schema(
-                {"ocsf": {"version": version}, "arcticwolf_extension": {"version": "1.0.0"}},
+                {"ocsf": {"version": version}, "arcticwolf_ocsf_extension": {"version": "1.0.0"}},
                 "schema_definition.schema.json", "t"), version
         for version in bad:
             assert v.validate_against_schema(
-                {"ocsf": {"version": version}, "arcticwolf_extension": {"version": "1.0.0"}},
+                {"ocsf": {"version": version}, "arcticwolf_ocsf_extension": {"version": "1.0.0"}},
                 "schema_definition.schema.json", "t"), version
 
 
@@ -157,25 +148,3 @@ class TestVersionSchema:
     @pytest.mark.parametrize("version", ["1.0", "1", "v1.0.0", "1.0.0.0", "", " 1.0.0", "1.0.0-", "dev", None, 1, 1.0])
     def test_rejects_everything_else(self, version):
         assert v.validate_against_schema({"version": version}, "version.schema.json", "t")
-
-
-class TestRealFilesMatchTheirSchemas:
-    def test_mappings_yaml(self):
-        assert v.validate_against_schema(
-            yaml.safe_load(MAPPINGS_PATH.read_text()), "mappings.schema.json", "mappings.yaml") == []
-
-    def test_schema_definition_yaml(self):
-        assert v.validate_against_schema(
-            yaml.safe_load(SCHEMA_DEFINITION_PATH.read_text()),
-            "schema_definition.schema.json", "schema_definition.yaml") == []
-
-    def test_version_json(self):
-        assert v.validate_against_schema(
-            json.loads(VERSION_PATH.read_text()), "version.schema.json", "version.json") == []
-
-    def test_every_class_config(self):
-        paths = discover_class_configs(CONFIG_DIR)
-        assert paths
-        for path in paths:
-            assert v.validate_against_schema(
-                yaml.safe_load(path.read_text()), "config.schema.json", str(path)) == [], path

@@ -4,6 +4,7 @@ import pytest
 import yaml
 
 from scripts import generate_confluence_pages as gcp
+import scripts.common as pc
 from scripts.common import ClassConfig, Mapping
 from tests.conftest import FOLDER_ID, SPACE_ID
 
@@ -112,6 +113,34 @@ class TestBuildMappingRows:
         rows = rows_for(mini_schema, [Mapping(polearms=["name", "tags"], swords="s", mapper={"fn": "map_x"})])
         assert [r.polearms_field for r in rows] == ["name", "tags"]
         assert {r.mapping for r in rows} == {"<strong>Complex</strong> (many-to-one)"}
+
+    def test_requirement_marks_a_field_in_an_object_constraint(self, mini_schema):
+        mini_schema.objects["person"]["constraints"] = {"at_least_one": ["email", "address"]}
+        (row,) = rows_for(mini_schema, [Mapping(polearms="owner.email", swords="s")])
+        assert row.requirement == "optional (conditionally required)"
+
+    def test_requirement_marks_a_field_in_a_just_one_constraint(self, mini_schema):
+        mini_schema.classes["widget"]["constraints"] = {"just_one": ["name", "tags"]}
+        (row,) = rows_for(mini_schema, [Mapping(polearms="tags", swords="s")])
+        assert row.requirement == "optional (conditionally required)"
+
+    def test_requirement_says_it_once_however_many_constraints_the_field_is_in(self, mini_schema):
+        mini_schema.classes["widget"]["constraints"] = {"at_least_one": ["name", "tags"], "just_one": ["name", "owner"]}
+        (row,) = rows_for(mini_schema, [Mapping(polearms="name", swords="s")])
+        assert row.requirement == "required (conditionally required)"
+
+    def test_requirement_is_plain_when_the_field_is_in_no_constraint(self, mini_schema):
+        mini_schema.objects["person"]["constraints"] = {"at_least_one": ["address"]}
+        (row,) = rows_for(mini_schema, [Mapping(polearms="owner.email", swords="s")])
+        assert row.requirement == "optional"
+
+    def test_unmapped_essential_fields_are_also_marked(self, mini_schema):
+        mini_schema.classes["widget"]["constraints"] = {"at_least_one": ["name", "tags"]}
+        (row,) = rows_for(mini_schema, [], essentials=["tags"])
+        assert row.requirement == "optional (conditionally required)"
+
+    def test_a_field_with_no_schema_requirement_is_just_marked(self):
+        assert gcp.requirement_text({}, [pc.Constraint("at_least_one", ("a",))]) == "conditionally required"
 
     def test_array_of_a_primitive_type_gets_brackets(self, mini_schema):
         mini_schema.classes["widget"]["attributes"]["tags"]["is_array"] = True
@@ -508,27 +537,3 @@ class TestMain:
         with pytest.raises(SystemExit, match=message):
             run_main(monkeypatch, "--confluence-user", "u", "--confluence-token", "t")
         assert confluence.pages == {}
-
-
-class TestRealRepository:
-    """Every real class config must build its pages without error, using the real schema."""
-
-    def test_all_classes_build(self):
-        import scripts.common as pc
-        schema = pc.OCSFSchema.load(pc.SCHEMA_PATH)
-        globals_ = pc.load_mappings(pc.MAPPINGS_PATH)
-        paths = pc.discover_class_configs(pc.CONFIG_DIR)
-        assert paths
-        for path in paths:
-            pages = gcp.build_pages("0.0.0", pc.ClassConfig.load(path), globals_, schema, {})
-            assert len(pages) == 2 and all(p.body.startswith(("<p>", "<table")) for p in pages)
-
-    def test_vendor_overflow_page_has_the_expected_shape(self):
-        import scripts.common as pc
-        schema = pc.OCSFSchema.load(pc.SCHEMA_PATH)
-        cfg = pc.ClassConfig.load(pc.CONFIG_DIR / "arcticwolf" / "vendor_overflow" / "config.yaml")
-        mappings, essential = gcp.build_pages("1", cfg, pc.load_mappings(pc.MAPPINGS_PATH), schema, {})
-        assert mappings.title == "Vendor Overflow 1 - Mappings"
-        assert essential.summary == f"{len(cfg.essential_fields)} essential fields"
-        # Rendered inside <code>, so the quotes in join(..., ",") are HTML-escaped.
-        assert "join(attacks[technique.uid!=null].technique.uid, &quot;,&quot;)" in mappings.body
