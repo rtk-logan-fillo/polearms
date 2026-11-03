@@ -35,7 +35,7 @@ mappings:
 - polearms: actor.user.type
   swords: cloud.client.delegated-user.type
 
-- polearms: arcticwolf.ingestion_service.endpoint.name
+- polearms: arcticwolf.service.endpoint.name
   swords: cloud.service.endpoint
 
 - polearms: dst_endpoint.ip

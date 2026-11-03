@@ -12,7 +12,7 @@ essential_fields:
   - polearms: arcticwolf.customer.uuid
   - polearms: arcticwolf.deployment.id
   - polearms: arcticwolf.deployment.uuid
-  - polearms: arcticwolf.ingestion_service.endpoint.name
+  - polearms: arcticwolf.service.endpoint.name
   - polearms: attacks[].sub_technique.src_url
   - polearms: attacks[].tactic.name
   - polearms: attacks[].tactic.src_url

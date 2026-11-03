@@ -1,12 +1,14 @@
 name: Pull request
 
-# The checks for a pull request into main that changes anything outside schema/. A pull request that
-# only changes schema/ is handled by validate-and-compile-schema.yaml instead.
+# The checks for a pull request into main. A pull request that only changes
+# schema/schema_definition.yaml or schema/schema.json is not checked here; the former is handled
+# by validate-and-compile-schema.yaml.
 on:
   pull_request:
     branches: [main]
     paths-ignore:
-      - "schema/**"
+      - "schema/schema_definition.yaml"
+      - "schema/schema.json"
 
 permissions:
   contents: read
