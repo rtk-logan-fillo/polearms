@@ -321,3 +321,43 @@ class TestHashEnrichments:
     ])
     def test_none_when_no_matching_fingerprint(self, name, evidences):
         assert cm.get_mapper(name)(evidences) is None
+
+
+# ---------------------------------------------------------------------------
+# File hashes and privileges
+# ---------------------------------------------------------------------------
+
+FILE_HASHES = [
+    {"algorithm_id": 1, "value": "md5-a"},
+    {"algorithm_id": 2, "value": "sha1-a"},
+    {"algorithm_id": 3, "value": "sha256-a"},
+    {"algorithm_id": 18, "value": "imphash-a"},
+    {"algorithm_id": 1, "value": "md5-b"},
+    {"algorithm_id": 99, "algorithm": "ssdeep", "value": "other"},
+]
+
+
+class TestFileHashes:
+    @pytest.mark.parametrize("name,expected", [
+        ("map_file_hash_md5", "md5-a"),
+        ("map_file_hash_sha1", "sha1-a"),
+        ("map_file_hash_sha256", "sha256-a"),
+        ("map_file_hash_imphash", "imphash-a"),
+    ])
+    def test_selects_first_hash_by_algorithm(self, name, expected):
+        assert cm.get_mapper(name)(FILE_HASHES) == expected
+
+    @pytest.mark.parametrize("name", [
+        "map_file_hash_md5", "map_file_hash_sha1", "map_file_hash_sha256", "map_file_hash_imphash"])
+    @pytest.mark.parametrize("hashes", [None, [], [{"algorithm_id": 99, "value": "x"}]])
+    def test_none_when_no_matching_hash(self, name, hashes):
+        assert cm.get_mapper(name)(hashes) is None
+
+
+class TestPrivileges:
+    def test_returns_the_privileges(self):
+        assert cm.map_privileges(["admin", "read"]) == ["admin", "read"]
+
+    @pytest.mark.parametrize("privileges", [None, []])
+    def test_none_when_empty(self, privileges):
+        assert cm.map_privileges(privileges) is None

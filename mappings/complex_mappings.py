@@ -7,6 +7,7 @@ DATETIME_FORMAT_MILLI = "%Y-%m-%dT%H:%M:%S.%f"
 DATETIME_FORMAT = "%Y-%m-%dT%H:%M:%S"
 
 FINGERPRINT_ALGORITHMS = {1: "md5", 2: "sha1", 3: "sha256"}
+FILE_HASH_ALGORITHM_IDS = {"md5": 1, "sha1": 2, "sha256": 3, "imphash": 18}
 
 CLASS_MAP_PATH = Path(__file__).resolve().parent / "class_map.yaml"
 with open(CLASS_MAP_PATH) as _class_map_file:
@@ -44,6 +45,13 @@ def _hash_enrichments(evidences, algorithm_id):
                 algorithm = FINGERPRINT_ALGORITHMS[algorithm_id]
                 enrichments.append({"indicator": {"hash": {algorithm: fingerprint["value"]}}})
     return enrichments or None
+
+
+def _file_hash(file_hashes, algorithm_id):
+    for fingerprint in file_hashes or []:
+        if fingerprint.get("algorithm_id") == algorithm_id:
+            return fingerprint.get("value")
+    return None
 
 
 def map_telemetry_types(class_uid):
@@ -212,6 +220,26 @@ def map_evidence_hash_sha256(evidences):
     return _hash_enrichments(evidences, 3)
 
 
+def map_file_hash_md5(file_hashes):
+    return _file_hash(file_hashes, FILE_HASH_ALGORITHM_IDS["md5"])
+
+
+def map_file_hash_sha1(file_hashes):
+    return _file_hash(file_hashes, FILE_HASH_ALGORITHM_IDS["sha1"])
+
+
+def map_file_hash_sha256(file_hashes):
+    return _file_hash(file_hashes, FILE_HASH_ALGORITHM_IDS["sha256"])
+
+
+def map_file_hash_imphash(file_hashes):
+    return _file_hash(file_hashes, FILE_HASH_ALGORITHM_IDS["imphash"])
+
+
+def map_privileges(privileges):
+    return list(privileges) if privileges else None
+
+
 def map_malware_scan_info_size(size):
     return [{"indicator": {"file": {"size": str(size)}}}]
 
@@ -256,6 +284,11 @@ MAPPERS = {
     "map_evidence_hash_md5": map_evidence_hash_md5,
     "map_evidence_hash_sha1": map_evidence_hash_sha1,
     "map_evidence_hash_sha256": map_evidence_hash_sha256,
+    "map_file_hash_md5": map_file_hash_md5,
+    "map_file_hash_sha1": map_file_hash_sha1,
+    "map_file_hash_sha256": map_file_hash_sha256,
+    "map_file_hash_imphash": map_file_hash_imphash,
+    "map_privileges": map_privileges,
     "map_malware_scan_info_size": map_malware_scan_info_size,
     "map_malware_scan_info_type": map_malware_scan_info_type,
 }
