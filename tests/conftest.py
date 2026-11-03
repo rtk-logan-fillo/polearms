@@ -78,6 +78,12 @@ def fake_project(tmp_path):
         for name in ("widget-name", "owner-email", "s", "x", "elsewhere")
     }))
 
+    axes_mappings = tmp_path / "axes_all_mappings.json"
+    axes_mappings.write_text(json.dumps({
+        "widget.name": [{"operation": "rename", "stage": "OLAP", "forEach": False,
+                         "old": ["widget-name"], "strict": False}],
+    }))
+
     complex_mappings = tmp_path / "complex_mappings.py"
     complex_mappings.write_text("def map_x(value):\n    return value\n")
 
@@ -92,6 +98,7 @@ def fake_project(tmp_path):
     return SimpleNamespace(
         root=tmp_path, version=version, mappings=mappings, schema=schema,
         complex_mappings=complex_mappings, config_dir=config_dir, swords_schema=swords_schema,
+        axes_mappings=axes_mappings,
         widget_config=config_dir / "widget" / "config.yaml",
     )
 

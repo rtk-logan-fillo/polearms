@@ -11,7 +11,8 @@ POLEARMS is an existing folder in the MDRP space (BASE_FOLDER_ID); it must alrea
 never created or modified. <version> is the "version" in version.json.
 
 The SWORDS Type column comes from the SWORDS schema (datatype, with [] added for a list), which is
-downloaded to schema/ if it is not already there (see scripts/swords_schema.py).
+downloaded to schema/ if it is not already there (see scripts/swords_schema.py). The AXES Field
+column comes from the AXES mappings, likewise downloaded (see scripts/axes_mappings.py).
 
 Usage:
     python3 -m scripts.generate_confluence_pages --confluence-user USER --confluence-token TOKEN
@@ -25,9 +26,11 @@ import json
 import urllib.error
 import urllib.parse
 import urllib.request
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
+from scripts.axes_mappings import load_axes_mappings, swords_to_axes
 from scripts.common import (
+    AXES_MAPPINGS_PATH,
     CONFIG_DIR,
     MAPPINGS_PATH,
     SCHEMA_PATH,
@@ -86,6 +89,7 @@ class Row:
     join_sep: str | None = None
     swords: str = ""
     swords_type: str = ""
+    axes: list[str] = field(default_factory=list)
     mapping: str = ""
     source: str = ""
 
@@ -142,6 +146,7 @@ def build_mapping_rows(
     schema: OCSFSchema,
     class_name: str,
     swords_schema: dict,
+    axes_lookup: dict[str, list[str]],
 ) -> list[Row]:
     # One mapping per SWORDS field; a class override replaces the global mapping.
     effective: dict[str, tuple[Mapping, str]] = {}
@@ -181,6 +186,7 @@ def build_mapping_rows(
                 join_sep=m.join_separator(),
                 swords=m.display_swords(),
                 swords_type=swords_type(swords_schema.get(m.swords_field_path())),
+                axes=axes_lookup.get(m.swords_field_path(), []),
                 mapping=mapping_cell,
                 source=source_cell,
                 **schema_columns(attr, schema.field_constraints(class_name, field_path)),
@@ -196,9 +202,9 @@ def build_mapping_rows(
 
 
 MAPPING_COLUMNS = [
-    ("POLEARMS Field", 23), ("POLEARMS Caption", 9), ("POLEARMS Description", 20),
-    ("POLEARMS Type", 8), ("POLEARMS Requirement", 9), ("SWORDS Field", 17),
-    ("SWORDS Type", 6), ("Mapping Type", 5), ("Source", 3),
+    ("POLEARMS Field", 19), ("POLEARMS Caption", 8), ("POLEARMS Description", 18),
+    ("POLEARMS Type", 7), ("POLEARMS Requirement", 8), ("SWORDS Field", 14),
+    ("SWORDS Type", 6), ("AXES Field", 12), ("Mapping Type", 5), ("Source", 3),
 ]
 ESSENTIAL_COLUMNS = [
     ("POLEARMS Field", 30), ("POLEARMS Caption", 15), ("POLEARMS Description", 47), ("Expected", 8),
@@ -225,6 +231,7 @@ def build_mapping_table(rows: list[Row]) -> str:
             escape_html(r.requirement),
             f"<code>{escape_html(r.swords)}</code>" if r.swords else "",
             escape_html(r.swords_type),
+            "<br/>".join(f"<code>{escape_html(a)}</code>" for a in r.axes),
             r.mapping,
             r.source,
         ]
@@ -251,6 +258,7 @@ def build_pages(
     global_mappings: list[Mapping],
     schema: OCSFSchema,
     swords_schema: dict,
+    axes_lookup: dict[str, list[str]],
 ) -> list[Page]:
     class_info = schema.lookup_class(config.name)
     class_title = f"{class_info['caption']} {version}"
@@ -263,7 +271,7 @@ def build_pages(
         overrides = filter_mappings_to_essential(overrides, config)
     rows = build_mapping_rows(
         mappings, overrides, [f["polearms"] for f in config.essential_fields],
-        schema, config.name, swords_schema,
+        schema, config.name, swords_schema, axes_lookup,
     )
     mapped = sum(1 for r in rows if r.swords)
 
@@ -407,6 +415,7 @@ def main() -> None:
     global_mappings = load_mappings(MAPPINGS_PATH)
     schema = OCSFSchema.load(SCHEMA_PATH)
     swords_schema = load_swords_schema(SWORDS_SCHEMA_PATH)
+    axes_lookup = swords_to_axes(load_axes_mappings(AXES_MAPPINGS_PATH))
 
     configs = [ClassConfig.load(p) for p in discover_class_configs(CONFIG_DIR)]
     if not configs:
@@ -414,7 +423,8 @@ def main() -> None:
 
     pages: list[Page] = []
     for config in configs:
-        pages.extend(build_pages(version, config, global_mappings, schema, swords_schema))
+        pages.extend(build_pages(
+            version, config, global_mappings, schema, swords_schema, axes_lookup))
 
     client = ConfluenceClient(CONFLUENCE_URL, args.confluence_user, args.confluence_token)
     publish_pages(pages, client)

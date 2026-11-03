@@ -28,3 +28,5 @@ htmlcov/
 build/
 # Downloaded by scripts/swords_schema.py
 carser_swords_schema.json
+# Downloaded by scripts/axes_mappings.py
+axes_all_mappings.json

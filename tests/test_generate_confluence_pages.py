@@ -89,9 +89,12 @@ SWORDS = {
 }
 
 
-def rows_for(mini_schema, mappings, overrides=(), essentials=(), swords=SWORDS):
+AXES = {"widget-name": ["widget.name"], "owner-tags": ["owner.tags", "tags"]}
+
+
+def rows_for(mini_schema, mappings, overrides=(), essentials=(), swords=SWORDS, axes=AXES):
     return gcp.build_mapping_rows(list(mappings), list(overrides), list(essentials),
-                                  mini_schema, "widget", swords)
+                                  mini_schema, "widget", swords, axes)
 
 
 class TestBuildMappingRows:
@@ -100,6 +103,24 @@ class TestBuildMappingRows:
         assert (row.polearms_field, row.swords, row.swords_type) == ("name", "widget-name", "string")
         assert (row.mapping, row.source) == ("Direct", "Global")
         assert (row.caption, row.type_name, row.requirement) == ("Name", "string_t", "required")
+
+    def test_axes_fields_come_from_the_axes_lookup(self, mini_schema):
+        (row,) = rows_for(mini_schema, [Mapping(polearms="name", swords="widget-name")])
+        assert row.axes == ["widget.name"]
+
+    def test_a_swords_field_feeding_several_axes_fields_lists_them_all(self, mini_schema):
+        (row,) = rows_for(mini_schema, [Mapping(polearms="tags", swords="owner-tags")])
+        assert row.axes == ["owner.tags", "tags"]
+
+    def test_axes_looks_up_the_path_without_its_labels(self, mini_schema):
+        (row,) = rows_for(mini_schema, [Mapping(polearms="name", swords="widget-name[a]")],
+                          swords={}, axes={"widget-name": ["x"]})
+        assert row.axes == ["x"]
+
+    def test_axes_is_blank_for_a_swords_field_axes_does_not_map(self, mini_schema):
+        rows = rows_for(mini_schema, [Mapping(polearms="name", swords="widget-name")],
+                        essentials=["tags"], axes={})
+        assert [r.axes for r in rows] == [[], []]
 
     def test_schema_description_is_kept_as_html(self, mini_schema):
         (row,) = rows_for(mini_schema, [Mapping(polearms="name", swords="widget-name")])
@@ -253,6 +274,14 @@ class TestTables:
         assert "<code>s&amp;t</code>" in html
         assert "<td><strong>Complex</strong></td>" in html
 
+    def test_mapping_table_lists_axes_fields_escaped_one_per_line(self):
+        html = gcp.build_mapping_table([gcp.Row(polearms_field="a", axes=["x.y", "z&w"])])
+        assert "<td><code>x.y</code><br/><code>z&amp;w</code></td>" in html
+
+    def test_axes_column_follows_swords_type(self):
+        titles = [t for t, _ in gcp.MAPPING_COLUMNS]
+        assert titles.index("AXES Field") == titles.index("SWORDS Type") + 1
+
     def test_mapping_table_leaves_swords_blank_for_unmapped_rows(self):
         html = gcp.build_mapping_table([gcp.Row(polearms_field="a")])
         assert "<code></code>" not in html
@@ -279,7 +308,7 @@ class TestBuildPages:
 
     def build(self, mini_schema, cfg, globals_=None):
         return gcp.build_pages("3.1.4", cfg, self.GLOBALS if globals_ is None else globals_,
-                               mini_schema, SWORDS)
+                               mini_schema, SWORDS, AXES)
 
     def test_two_pages_titled_by_caption_and_version(self, mini_schema):
         mappings, essential = self.build(mini_schema, config())
@@ -393,7 +422,7 @@ class TestConfluenceClient:
 
 def sample_pages(mini_schema, version="1.2.3"):
     return gcp.build_pages(version, config(essential_fields=[{"polearms": "name"}]),
-                           [Mapping(polearms="name", swords="widget-name")], mini_schema, SWORDS)
+                           [Mapping(polearms="name", swords="widget-name")], mini_schema, SWORDS, AXES)
 
 
 class TestPublishPages:
@@ -480,6 +509,7 @@ def project(fake_project, confluence, monkeypatch):
     }.items():
         monkeypatch.setattr(gcp, name, path)
     monkeypatch.setattr(gcp, "SWORDS_SCHEMA_PATH", fake_project.swords_schema)
+    monkeypatch.setattr(gcp, "AXES_MAPPINGS_PATH", fake_project.axes_mappings)
     monkeypatch.setattr(gcp, "CONFLUENCE_URL", confluence.url)
     return fake_project
 
