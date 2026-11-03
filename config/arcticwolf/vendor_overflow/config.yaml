@@ -2,6 +2,10 @@ class_name: arcticwolf/vendor_overflow
 class_uid: 98500000
 essential_fields_only: true
 essential_fields:
+  - polearms: action
+  - polearms: action_id
+  - polearms: activity_id
+  - polearms: activity_name
   - polearms: actor.app_name
   - polearms: actor.user.name
   - polearms: actor.user.email_addr
@@ -14,7 +18,7 @@ essential_fields:
   - polearms: arcticwolf.customer.id
   - polearms: arcticwolf.deployment.uuid
   - polearms: arcticwolf.deployment.id
-  - polearms: arcticwolf.ingestion_service.endpoint.name
+  - polearms: arcticwolf.service.endpoint.name
   - polearms: attacks[].sub_technique.name
   - polearms: attacks[].sub_technique.src_url
   - polearms: attacks[].sub_technique.uid
@@ -35,6 +39,19 @@ essential_fields:
   - polearms: http_request.user_agent
   - polearms: http_response.code
   - polearms: device.type
+  - polearms: device.hostname
+  - polearms: device.name
+  - polearms: device.os.name
+  - polearms: device.uid
+  - polearms: email.from
+  - polearms: email.message_uid
+  - polearms: email.subject
+  - polearms: email.to
+  - polearms: file.hashes[].algorithm
+  - polearms: file.hashes[].algorithm_id
+  - polearms: file.hashes[].value
+  - polearms: file.name
+  - polearms: file.path
   - polearms: firewall_rule.desc
   - polearms: firewall_rule.match_location
   - polearms: firewall_rule.name
@@ -44,26 +61,30 @@ essential_fields:
   - polearms: message
   - polearms: metadata.labels
   - polearms: metadata.log_name
-  - polearms: metadata.log_provider
   - polearms: metadata.log_source
   - polearms: metadata.log_version
+  - polearms: metadata.source
   - polearms: metadata.product.name
   - polearms: metadata.product.uid
   - polearms: metadata.type
   - polearms: metadata.version
-  - polearms: policies[].data
-  - polearms: policies[].type
-  - polearms: policies[].uid
+  - polearms: privileges
+  - polearms: process.cmd_line
+  - polearms: session.uid
   - polearms: severity
   - polearms: severity_id
+  - polearms: src_endpoint.hostname
   - polearms: src_endpoint.ip
   - polearms: time
   - polearms: type_name
   - polearms: type_uid
   - polearms: user.name
+  - polearms: user.account.name
   - polearms: user.account.tags[].name
   - polearms: user.account.tags[].value
+  - polearms: user.account.uid
   - polearms: user.email_addr
+  - polearms: user.type
   - polearms: user.uid
   - polearms: user_result.email_addr
   - polearms: user_result.groups[].desc
