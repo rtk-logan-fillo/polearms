@@ -110,13 +110,52 @@ mappings:
 - polearms: user_result.name
   swords: ad.event.target.changed-attributes.display-name
 
+- polearms: device.hostname
+  swords: host.hostname
+
+- polearms: device.uid
+  swords: host.id
+
+- polearms: device.os.name
+  swords: host.os.name
+
+- polearms: email.from
+  swords: mail.from-user
+
+- polearms: email.message_uid
+  swords: mail.message-id
+
+- polearms: email.subject
+  swords: mail.subject
+
+- polearms: email.to
+  swords: mail.to-user
+
+- polearms: file.name
+  swords: file.name
+
+- polearms: file.path
+  swords: file.path
+
+- polearms: process.cmd_line
+  swords: process.command_line
+
+- polearms: src_endpoint.hostname
+  swords: c-hostname
+
+- polearms: user.account.uid
+  swords: cloud.account.id
+
+- polearms: session.uid
+  swords: proxy.session-id
+
 - polearms: class_uid
   swords: telemetry-types
   mapper:
     fn: map_telemetry_types
 
 - polearms: time
-  swords: "@timestamp"
+  swords: "@carser_timestamp"
   mapper:
     fn: map_time
 
@@ -220,3 +259,47 @@ mappings:
     args:
       user_result_groups: user_result.groups
     join: ","
+
+- polearms: file.hashes[x].value
+  swords: file.hash.md5
+  labels:
+    x: "algorithm_id==1"
+  mapper:
+    fn: map_file_hash_md5
+    args:
+      file_hashes: file.hashes
+
+- polearms: file.hashes[x].value
+  swords: file.hash.sha1
+  labels:
+    x: "algorithm_id==2"
+  mapper:
+    fn: map_file_hash_sha1
+    args:
+      file_hashes: file.hashes
+
+- polearms: file.hashes[x].value
+  swords: file.hash.sha256
+  labels:
+    x: "algorithm_id==3"
+  mapper:
+    fn: map_file_hash_sha256
+    args:
+      file_hashes: file.hashes
+
+- polearms: file.hashes[x].value
+  swords: file.hash.imphash
+  labels:
+    x: "algorithm_id==18"
+  mapper:
+    fn: map_file_hash_imphash
+    args:
+      file_hashes: file.hashes
+
+- polearms: privileges
+  swords: cloud.client.user.privileges
+  mapper:
+    fn: map_privileges
+    args:
+      privileges: privileges
+    join: ", "
