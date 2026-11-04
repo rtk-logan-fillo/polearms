@@ -78,11 +78,10 @@ def fake_project(tmp_path):
         for name in ("widget-name", "owner-email", "s", "x", "elsewhere")
     }))
 
-    axes_mappings = tmp_path / "axes_all_mappings.json"
-    axes_mappings.write_text(json.dumps({
-        "widget.name": [{"operation": "rename", "stage": "OLAP", "forEach": False,
-                         "old": ["widget-name"], "strict": False}],
-    }))
+    axes_mappings = tmp_path / "axes_mappings.json"
+    axes_mappings.write_text(json.dumps([
+        {"file": "widget.yaml", "old": "widget-name", "ecs": "widget.name"},
+    ]))
 
     complex_mappings = tmp_path / "complex_mappings.py"
     complex_mappings.write_text("def map_x(value):\n    return value\n")
