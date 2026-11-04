@@ -43,6 +43,9 @@ NO_AXES_FIELD = {"TODO", "DROP", "COMPLEX"}
 # The top-level SWORDS fields are written as base.<field> in the mappings.
 BASE_PREFIX = "base."
 
+# SWORDS fields the framework renames before the mappings apply: {field in the SWORDS schema: field the mappings know}.
+SWORDS_ALIASES = {"@carser_timestamp": "@timestamp"}
+
 
 def _get(url: str, token: str, accept: str) -> bytes:
     request = urllib.request.Request(url, headers={
@@ -135,7 +138,8 @@ def swords_to_axes(entries: list[dict]) -> dict[str, list[str]]:
     """{SWORDS field: [AXES fields it maps to]}, each list sorted.
 
     Entries whose ecs is TODO, DROP or COMPLEX have no AXES field. The 1-1 mappings of
-    _ecs_mappings.yaml are used for a SWORDS field only when no other file maps it.
+    _ecs_mappings.yaml are used for a SWORDS field only when no other file maps it. A field in
+    SWORDS_ALIASES gets the AXES fields of the field it becomes.
     """
     specific: dict[str, set[str]] = {}
     one_to_one: dict[str, set[str]] = {}
@@ -148,6 +152,9 @@ def swords_to_axes(entries: list[dict]) -> dict[str, list[str]]:
         if entry.get("also"):
             fields.add(_strip_base(entry["also"]))
     merged = {**one_to_one, **specific}
+    for alias, field in SWORDS_ALIASES.items():
+        if alias not in merged and field in merged:
+            merged[alias] = merged[field]
     return {swords_field: sorted(fields) for swords_field, fields in merged.items()}
 
 
