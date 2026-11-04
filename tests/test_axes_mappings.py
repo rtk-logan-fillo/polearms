@@ -95,6 +95,13 @@ class TestSwordsToAxes:
         entries = [entry("base.c-ip", "client.ip"), entry("base.telemetry-types", "base.telemetry_types")]
         assert am.swords_to_axes(entries) == {"c-ip": ["client.ip"], "telemetry-types": ["telemetry_types"]}
 
+    def test_carser_timestamp_gets_the_axes_fields_of_timestamp(self):
+        entries = [entry("@timestamp", "@timestamp", file=am.ONE_TO_ONE_FILE)]
+        assert am.swords_to_axes(entries)["@carser_timestamp"] == ["@timestamp"]
+
+    def test_an_alias_without_a_mapped_target_stays_unmapped(self):
+        assert "@carser_timestamp" not in am.swords_to_axes([entry("a", "b")])
+
 
 class TestParseMappingFile:
     def test_keeps_old_ecs_and_also(self):
