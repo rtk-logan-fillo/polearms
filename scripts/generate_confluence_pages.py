@@ -6,9 +6,14 @@ For every class config under config/ this builds two pages, in Confluence storag
     <Class> <version> - Mappings          every mapped field, with schema info and the SWORDS side
     <Class> <version> - Essential Fields  the class's essential fields, with schema info
 
-and creates or updates them in Confluence, under POLEARMS / <version> / <Class> <version>.
+and creates or updates them in Confluence, under POLEARMS / <version> (latest) / <Class> <version>,
+where <version> (latest) is a folder and the class pages beneath it are pages.
 POLEARMS is an existing folder in the MDRP space (BASE_FOLDER_ID); it must already exist and is
 never created or modified. <version> is the "version" in version.json.
+
+Only the version being published is "(latest)". Before publishing, the "<x.y.z> (latest)" folder of
+any earlier version is renamed to "<x.y.z>" and moved under the existing Previous Versions folder
+(PREVIOUS_VERSIONS_FOLDER_ID).
 
 The SWORDS Type column comes from the SWORDS schema (datatype, with [] added for a list), which is
 downloaded to schema/ if it is not already there (see scripts/swords_schema.py). The AXES Field
@@ -26,13 +31,13 @@ import json
 import urllib.error
 import urllib.parse
 import urllib.request
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 from scripts.axes_mappings import load_axes_mappings, swords_to_axes
 from scripts.common import (
     AXES_MAPPINGS_PATH,
     CONFIG_DIR,
-    MAPPINGS_PATH,
+    SWORDS_MAPPINGS_PATH,
     SCHEMA_PATH,
     SWORDS_SCHEMA_PATH,
     VERSION_PATH,
@@ -55,6 +60,12 @@ CONFLUENCE_URL = "https://arcticwolf.atlassian.net/wiki"
 BASE_FOLDER_ID = "6981780874"
 BASE_FOLDER_TITLE = "POLEARMS"
 
+# https://arcticwolf.atlassian.net/wiki/spaces/MDRP/folder/7032635669
+PREVIOUS_VERSIONS_FOLDER_ID = "7032635669"
+PREVIOUS_VERSIONS_FOLDER_TITLE = "Previous Versions"
+
+LATEST_SUFFIX = " (latest)"
+
 
 # ---------------------------------------------------------------------------
 # Path helpers
@@ -75,7 +86,7 @@ def escape_html(text: str) -> str:
 class Page:
     title: str
     body: str
-    hierarchy: list[str]
+    hierarchy: list[str]  # the version folder, then the pages leading to this one
     summary: str
 
 
@@ -87,6 +98,7 @@ class Row:
     type_name: str = ""
     requirement: str = ""
     join_sep: str | None = None
+    first: bool = False
     swords: str = ""
     swords_type: str = ""
     axes: list[str] = field(default_factory=list)
@@ -94,6 +106,8 @@ class Row:
     source: str = ""
 
     def shown_field(self) -> str:
+        if self.first:
+            return f"first({self.polearms_field})"
         if self.join_sep is None:
             return self.polearms_field
         return f"join({self.polearms_field}, {json.dumps(self.join_sep)})"
@@ -109,7 +123,7 @@ def filter_mappings_to_essential(mappings: list[Mapping], config: ClassConfig) -
         # A many-to-one mapping needs every input to produce its output: whole or not at all.
         if m.is_many_to_one() and len(paths) != len(m.polearms):
             continue
-        kept.append(Mapping(paths, m.swords, m.labels, m.mapper))
+        kept.append(replace(m, polearms=paths))
     return kept
 
 
@@ -172,7 +186,7 @@ def build_mapping_rows(
 
             if m.is_many_to_one():
                 mapping_cell = "<strong>Complex</strong> (many-to-one)"
-            elif m.mapper is not None:
+            elif m.mapper is not None or "[" in polearms_path:
                 mapping_cell = "<strong>Complex</strong>"
             else:
                 mapping_cell = "Direct"
@@ -184,6 +198,7 @@ def build_mapping_rows(
             rows.append(Row(
                 polearms_field=display_path(polearms_path, m.labels),
                 join_sep=m.join_separator(),
+                first=m.first,
                 swords=m.display_swords(),
                 swords_type=swords_type(swords_schema.get(m.swords_field_path())),
                 axes=axes_lookup.get(m.swords_field_path(), []),
@@ -262,7 +277,7 @@ def build_pages(
 ) -> list[Page]:
     class_info = schema.lookup_class(config.name)
     class_title = f"{class_info['caption']} {version}"
-    hierarchy = [version, class_title]
+    hierarchy = [version + LATEST_SUFFIX, class_title]
     description = f"<p>{class_info['description']}</p>" if class_info.get("description") else ""
 
     mappings, overrides = global_mappings, config.override_mappings
@@ -349,6 +364,37 @@ class ConfluenceClient:
             "version": {"number": version},
         })
 
+    def direct_children(self, folder_id: str) -> list[dict]:
+        return self.request(
+            "GET", f"/api/v2/folders/{urllib.parse.quote(folder_id)}/direct-children?limit=250"
+        ).get("results", [])
+
+    def create_folder(self, space_id: str, parent_id: str, title: str) -> dict:
+        return self.request("POST", "/api/v2/folders", {
+            "spaceId": space_id, "parentId": parent_id, "title": title,
+        })
+
+    def find_or_create_folder(self, space_id: str, parent_id: str, title: str) -> tuple[dict, bool]:
+        """The folder titled title directly under parent_id, created if it does not exist."""
+        for child in self.direct_children(parent_id):
+            if child.get("type") == "folder" and child["title"] == title:
+                return child, False
+        return self.create_folder(space_id, parent_id, title), True
+
+    def rename_folder(self, folder_id: str, title: str) -> None:
+        quoted = urllib.parse.quote(folder_id)
+        current = self.request("GET", f"/rest/api/content/{quoted}")
+        self.request("PUT", f"/rest/api/content/{quoted}", {
+            "type": "folder",
+            "title": title,
+            "version": {"number": current["version"]["number"] + 1},
+        })
+
+    def move_content(self, content_id: str, target_id: str) -> None:
+        """Move a page or folder to be the last child of target_id."""
+        self.request("PUT", "/rest/api/content/"
+                     f"{urllib.parse.quote(content_id)}/move/append/{urllib.parse.quote(target_id)}")
+
     def find_or_create_page(self, space_id: str, parent_id: str, title: str) -> tuple[dict, bool]:
         """The page titled title under parent_id, created empty if it does not exist.
 
@@ -365,6 +411,32 @@ class ConfluenceClient:
         return page, False
 
 
+def archive_previous_latest(client: ConfluenceClient, space_id: str, latest_title: str) -> None:
+    """Move every "<version> (latest)" folder under POLEARMS other than latest_title to Previous Versions."""
+    previous = client.get_folder(PREVIOUS_VERSIONS_FOLDER_ID)
+    if previous.get("title") != PREVIOUS_VERSIONS_FOLDER_TITLE or str(previous["spaceId"]) != space_id:
+        raise SystemExit(
+            f"folder {PREVIOUS_VERSIONS_FOLDER_ID} is titled {previous.get('title')!r} in space "
+            f"{previous.get('spaceId')}, expected {PREVIOUS_VERSIONS_FOLDER_TITLE!r} in space "
+            f"{space_id}; refusing to publish")
+
+    stale = [
+        child for child in client.direct_children(BASE_FOLDER_ID)
+        if child.get("type") == "folder"
+        and child["title"].endswith(LATEST_SUFFIX) and child["title"] != latest_title
+    ]
+    archived_titles = {c["title"] for c in client.direct_children(PREVIOUS_VERSIONS_FOLDER_ID)}
+    for child in stale:
+        new_title = child["title"].removesuffix(LATEST_SUFFIX)
+        if new_title in archived_titles:
+            raise SystemExit(
+                f"cannot archive {child['title']!r}: {new_title!r} already exists in "
+                f"{PREVIOUS_VERSIONS_FOLDER_TITLE}; remove or rename it and retry")
+        client.move_content(child["id"], PREVIOUS_VERSIONS_FOLDER_ID)
+        client.rename_folder(child["id"], new_title)
+        print(f"  Archived: {child['title']} -> {PREVIOUS_VERSIONS_FOLDER_TITLE}/{new_title}")
+
+
 def publish_pages(pages: list[Page], client: ConfluenceClient) -> None:
     print("Authenticating... ", end="", flush=True)
     client.current_user()
@@ -378,9 +450,15 @@ def publish_pages(pages: list[Page], client: ConfluenceClient) -> None:
     space_id = str(base["spaceId"])
     print(f"Publishing under folder {BASE_FOLDER_TITLE} ({BASE_FOLDER_ID})")
 
+    if pages:
+        archive_previous_latest(client, space_id, pages[0].hierarchy[0])
+
     for page in pages:
-        parent_id = BASE_FOLDER_ID
-        for title in page.hierarchy:
+        version_folder, *intermediate = page.hierarchy
+        folder, created = client.find_or_create_folder(space_id, BASE_FOLDER_ID, version_folder)
+        print(f"  {'Created' if created else 'Found  '} folder: {version_folder}")
+        parent_id = str(folder["id"])
+        for title in intermediate:
             parent, created = client.find_or_create_page(space_id, parent_id, title)
             print(f"  {'Created' if created else 'Found  '} page: {title}")
             parent_id = str(parent["id"])
@@ -412,7 +490,7 @@ def main() -> None:
     args = parser.parse_args()
 
     version = load_version(VERSION_PATH)
-    global_mappings = load_mappings(MAPPINGS_PATH)
+    global_mappings = load_mappings(SWORDS_MAPPINGS_PATH)
     schema = OCSFSchema.load(SCHEMA_PATH)
     swords_schema = load_swords_schema(SWORDS_SCHEMA_PATH)
     axes_lookup = swords_to_axes(load_axes_mappings(AXES_MAPPINGS_PATH))

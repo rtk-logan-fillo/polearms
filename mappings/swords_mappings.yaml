@@ -162,144 +162,81 @@ mappings:
 - polearms: severity_id
   swords: threat.severity
 
-- polearms: attacks[x].tactic.uid
+- polearms: attacks[].tactic.uid
   swords: threat.tactic.id
-  labels:
-    x: "tactic.uid!=null"
-  mapper:
-    fn: map_attack_tactic_id
-    args:
-      attacks: attacks
 
-- polearms: attacks[x].tactic.name
+- polearms: attacks[].tactic.name
   swords: threat.tactic.name
-  labels:
-    x: "tactic.name!=null"
-  mapper:
-    fn: map_attack_tactic_name
-    args:
-      attacks: attacks
 
-- polearms: attacks[x].tactic.src_url
+- polearms: attacks[].tactic.src_url
   swords: threat.tactic.reference
-  labels:
-    x: "tactic.src_url!=null"
-  mapper:
-    fn: map_attack_tactic_reference
-    args:
-      attacks: attacks
-    join: ","
+  join: ", "
 
-- polearms: attacks[x].technique.uid
+- polearms: attacks[].technique.uid
   swords: threat.technique.id
-  labels:
-    x: "technique.uid!=null"
-  mapper:
-    fn: map_attack_technique_id
-    args:
-      attacks: attacks
-    join: ","
+  join: ", "
 
-- polearms: attacks[x].technique.name
+- polearms: attacks[].technique.name
   swords: threat.technique.name
-  labels:
-    x: "technique.name!=null"
-  mapper:
-    fn: map_attack_technique_name
-    args:
-      attacks: attacks
 
-- polearms: attacks[x].technique.src_url
+- polearms: attacks[].technique.src_url
   swords: threat.technique.reference
-  labels:
-    x: "technique.src_url!=null"
-  mapper:
-    fn: map_attack_technique_reference
-    args:
-      attacks: attacks
-    join: ","
+  join: ", "
 
-- polearms: attacks[x].sub_technique.src_url
+- polearms: attacks[].sub_technique.src_url
   swords: threat.technique.subtechnique.reference
-  labels:
-    x: "sub_technique.src_url!=null"
-  mapper:
-    fn: map_attack_subtechnique_reference
-    args:
-      attacks: attacks
-    join: ","
+  join: ", "
 
 - polearms: activity_id
   swords: event.id
   mapper:
     fn: map_activity_id
 
-# TODO: this seems broken
-# - polearms: malware
+# TODO: fix this
+# - polearms: malware[].classifications[]
 #   swords: vulnerability.classification
-#   mapper:
-#     fn: map_malware_classifications
+#   join: ", "
 
 - polearms: malware_scan_info.size
   swords: threat.enrichments[].indicator.file.size
   mapper:
-    fn: map_malware_scan_info_size
+    fn: map_to_string
 
 - polearms: malware_scan_info.type
   swords: threat.enrichments[].indicator.file.type
-  mapper:
-    fn: map_malware_scan_info_type
 
-- polearms: user_result.groups[x].uid
+- polearms: user_result.groups[].uid
   swords: ad.event.target.changed-attributes.primary-group-id
-  labels:
-    x: "uid!=null"
-  mapper:
-    fn: map_user_result_groups_uid
-    args:
-      user_result_groups: user_result.groups
-    join: ","
+  join: ", "
 
 - polearms: file.hashes[x].value
   swords: file.hash.md5
-  labels:
-    x: "algorithm_id==1"
-  mapper:
-    fn: map_file_hash_md5
-    args:
-      file_hashes: file.hashes
+  selectors:
+    x:
+      label: "find(x -> x.algorithm==MD5)"
+      fn: select_first_md5
 
 - polearms: file.hashes[x].value
   swords: file.hash.sha1
-  labels:
-    x: "algorithm_id==2"
-  mapper:
-    fn: map_file_hash_sha1
-    args:
-      file_hashes: file.hashes
+  selectors:
+    x:
+      label: "find(x -> x.algorithm==SHA-1)"
+      fn: select_first_sha1
 
 - polearms: file.hashes[x].value
   swords: file.hash.sha256
-  labels:
-    x: "algorithm_id==3"
-  mapper:
-    fn: map_file_hash_sha256
-    args:
-      file_hashes: file.hashes
+  selectors:
+    x:
+      label: "find(x -> x.algorithm==SHA-256)"
+      fn: select_first_sha256
 
 - polearms: file.hashes[x].value
   swords: file.hash.imphash
-  labels:
-    x: "algorithm_id==18"
-  mapper:
-    fn: map_file_hash_imphash
-    args:
-      file_hashes: file.hashes
+  selectors:
+    x:
+      label: "find(x -> x.algorithm==Imphash)"
+      fn: select_first_imphash
 
-- polearms: privileges
+- polearms: privileges[]
   swords: cloud.client.user.privileges
-  mapper:
-    fn: map_privileges
-    args:
-      privileges: privileges
-    join: ","
+  join: ", "

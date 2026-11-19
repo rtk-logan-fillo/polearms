@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 import yaml
@@ -12,16 +12,22 @@ import yaml
 ROOT = Path(__file__).resolve().parent.parent
 VERSION_PATH = ROOT / "version.json"
 CONFIG_DIR = ROOT / "config"
-MAPPINGS_PATH = ROOT / "mappings" / "mappings.yaml"
+SWORDS_MAPPINGS_PATH = ROOT / "mappings" / "swords_mappings.yaml"
 SCHEMA_PATH = ROOT / "schema" / "schema.json"
 SCHEMA_DEFINITION_PATH = ROOT / "schema" / "schema_definition.yaml"
 SWORDS_SCHEMA_PATH = ROOT / "schema" / "carser_swords_schema.json"
 AXES_MAPPINGS_PATH = ROOT / "schema" / "axes_mappings.json"
-COMPLEX_MAPPINGS_PATH = ROOT / "mappings" / "complex_mappings.py"
-CLASS_MAP_PATH = ROOT / "mappings" / "class_map.yaml"
+MAPPERS_AND_SELECTORS_PATH = ROOT / "mappings" / "mappers_and_selectors.py"
+CLASS_MAPPINGS_PATH = ROOT / "mappings" / "class_mappings.yaml"
 
 
 _BRACKET = re.compile(r"\[[^\]]*\]")
+_INDEX = re.compile(r"[0-9]+")
+
+
+def is_index(key: str) -> bool:
+    """Whether a bracket's content is an array index, like the 0 in 'evidences[0]'."""
+    return _INDEX.fullmatch(key) is not None
 
 
 def base_path(path: str) -> str:
@@ -46,8 +52,10 @@ class Mapping:
     # In YAML, polearms is either one path or a list of paths; a single path is stored as a list.
     polearms: list[str] | str
     swords: str
-    labels: dict[str, str] = field(default_factory=dict)
+    selectors: dict[str, dict] = field(default_factory=dict)
     mapper: dict | None = None
+    join: str | None = None
+    first: bool = False
 
     def __post_init__(self):
         if isinstance(self.polearms, str):
@@ -60,9 +68,43 @@ class Mapping:
         return cls(
             polearms=raw.get("polearms") or [],
             swords=raw.get("swords") or "",
-            labels=dict(raw.get("labels") or {}),
+            selectors={k: dict(v) for k, v in (raw.get("selectors") or {}).items()},
             mapper=raw.get("mapper"),
+            join=raw.get("join"),
+            first=bool(raw.get("first", False)),
         )
+
+    @property
+    def labels(self) -> dict[str, str]:
+        """Each selector's label, by bracket key, for showing in paths."""
+        return {k: v.get("label", "") for k, v in self.selectors.items()}
+
+    def selector_fn(self, key: str) -> str:
+        return (self.selectors.get(key) or {}).get("fn") or ""
+
+    def path_produces_list(self, path: str, list_selectors: frozenset[str] | None = None) -> bool:
+        """Whether one polearms path gives several items: it has a bare [] or a selector that
+        returns a list. An index [N], a selector that returns one item, and a documentation-only
+        selector do not. With list_selectors left out, every selector function counts as list-returning."""
+        for key in label_keys(path):
+            if key == "":
+                return True
+            fn = self.selector_fn(key)
+            if not is_index(key) and fn and (list_selectors is None or fn in list_selectors):
+                return True
+        return False
+
+    def produces_list(self, list_selectors: frozenset[str] | None = None) -> bool:
+        """Whether every polearms path gives a list. A mapping combining several paths gives one
+        only if each of them does, because the lists are joined end to end."""
+        paths = [p for p in self.polearms if p]
+        return bool(paths) and all(self.path_produces_list(p, list_selectors) for p in paths)
+
+    def logic_key(self) -> str:
+        """What computes the value: the mapper function plus the selector functions, so two
+        mappings of one field that pick different items (file.hashes by algorithm) are told apart."""
+        selectors = ",".join(self.selector_fn(k) for k in sorted(self.selectors) if self.selector_fn(k))
+        return self.mapper_fn() + (f"+{selectors}" if selectors else "")
 
     def has_polearms(self) -> bool:
         return any(self.polearms)
@@ -80,8 +122,8 @@ class Mapping:
 
     def label_keys(self) -> set[str]:
         """The [key] tokens used across the polearms and swords paths. A bare [] means "any
-        item" and needs no labels entry."""
-        return {k for p in [self.swords, *self.polearms] for k in label_keys(p) if k}
+        item" and a [N] index picks one; neither needs a selectors entry."""
+        return {k for p in [self.swords, *self.polearms] for k in label_keys(p) if k and not is_index(k)}
 
     def mapper_fn(self) -> str:
         return (self.mapper or {}).get("fn") or ""
@@ -96,7 +138,7 @@ class Mapping:
         return base_path(self.swords)
 
     def join_separator(self) -> str | None:
-        return (self.mapper or {}).get("join")
+        return self.join
 
 
 @dataclass

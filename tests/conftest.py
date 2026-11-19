@@ -63,7 +63,7 @@ def fake_project(tmp_path):
     version = tmp_path / "version.json"
     version.write_text(json.dumps({"version": "1.2.3"}))
 
-    mappings = tmp_path / "mappings.yaml"
+    mappings = tmp_path / "swords_mappings.yaml"
     mappings.write_text(yaml.safe_dump({"mappings": [
         {"polearms": "name", "swords": "widget-name"},
         {"polearms": "owner.email", "swords": "owner-email"},
@@ -83,8 +83,8 @@ def fake_project(tmp_path):
         {"file": "widget.yaml", "old": "widget-name", "ecs": "widget.name"},
     ]))
 
-    complex_mappings = tmp_path / "complex_mappings.py"
-    complex_mappings.write_text("def map_x(value):\n    return value\n")
+    mappers_and_selectors = tmp_path / "mappers_and_selectors.py"
+    mappers_and_selectors.write_text("def map_x(value):\n    return value\n")
 
     config_dir = tmp_path / "config"
     (config_dir / "widget").mkdir(parents=True)
@@ -96,24 +96,29 @@ def fake_project(tmp_path):
 
     return SimpleNamespace(
         root=tmp_path, version=version, mappings=mappings, schema=schema,
-        complex_mappings=complex_mappings, config_dir=config_dir, swords_schema=swords_schema,
+        mappers_and_selectors=mappers_and_selectors, config_dir=config_dir, swords_schema=swords_schema,
         axes_mappings=axes_mappings,
         widget_config=config_dir / "widget" / "config.yaml",
     )
 
 FOLDER_ID = "6981780874"
+PREVIOUS_FOLDER_ID = "7032635669"
 SPACE_ID = "space-1"
 
 
 class FakeConfluence:
     """An in-memory Confluence REST API (v2 pages and folders) over a real local HTTP socket.
 
-    Holds one folder, POLEARMS, in one space. Like Confluence, page titles are unique per space.
+    Holds two folders, POLEARMS and Previous Versions, in one space; pages and further folders go
+    under them. Like Confluence, content titles are unique per space.
     """
 
     def __init__(self):
         self.folder = {"id": FOLDER_ID, "title": "POLEARMS", "spaceId": SPACE_ID,
                        "parentId": None, "parentType": None}
+        self.previous = {"id": PREVIOUS_FOLDER_ID, "title": "Previous Versions", "spaceId": SPACE_ID,
+                         "parentId": None, "parentType": None}
+        self.folders: dict[str, dict] = {FOLDER_ID: self.folder, PREVIOUS_FOLDER_ID: self.previous}
         self.pages: dict[str, dict] = {}
         self.requests: list[tuple[str, str]] = []
         self.auth_headers: set[str] = set()
@@ -126,15 +131,43 @@ class FakeConfluence:
         return f"http://127.0.0.1:{self._server.server_port}"
 
     def titles(self) -> list[str]:
-        return sorted(p["title"] for p in self.pages.values())
+        """Titles of all pages and of folders other than the two pre-existing ones."""
+        created = (f for i, f in self.folders.items() if i not in (FOLDER_ID, PREVIOUS_FOLDER_ID))
+        return sorted(p["title"] for p in [*self.pages.values(), *created])
+
+    def _find(self, title: str) -> dict:
+        return next(c for c in [*self.pages.values(), *self.folders.values()] if c["title"] == title)
 
     def parent_title(self, title: str) -> str | None:
-        """Title of the page or folder this page sits under; None at the top of the space."""
-        page = next(p for p in self.pages.values() if p["title"] == title)
-        parent = page["parentId"]
-        if parent == self.folder["id"]:
-            return self.folder["title"]
-        return self.pages[parent]["title"] if parent else None
+        """Title of the page or folder this content sits under; None at the top of the space."""
+        parent = self._find(title)["parentId"]
+        if not parent:
+            return None
+        return (self.folders.get(parent) or self.pages[parent])["title"]
+
+    def type_of(self, title: str) -> str:
+        return "folder" if self._find(title)["id"] in self.folders else "page"
+
+    def add_folder(self, title: str, parent_id: str | None = FOLDER_ID) -> dict:
+        """Put a folder in the space directly, as someone else might have."""
+        self._next_id += 1
+        folder_id = str(self._next_id)
+        self.folders[folder_id] = {
+            "id": folder_id, "title": title, "spaceId": SPACE_ID, "parentId": parent_id,
+            "parentType": "folder" if parent_id in self.folders else None,
+            "type": "folder", "version": {"number": 1},
+        }
+        return self.folders[folder_id]
+
+    def children_of(self, parent_id: str) -> list[dict]:
+        return [
+            {"id": c["id"], "title": c["title"], "type": "folder" if c["id"] in self.folders else "page"}
+            for c in [*self.pages.values(), *self.folders.values()] if c["parentId"] == parent_id
+        ]
+
+    def _reparent(self, content: dict, parent_id: str) -> None:
+        content["parentId"] = parent_id
+        content["parentType"] = "folder" if parent_id in self.folders else "page"
 
     def add_page(self, title: str, parent_id: str | None = None, body: str = "") -> dict:
         """Put a page in the space directly, as someone else might have."""
@@ -142,7 +175,7 @@ class FakeConfluence:
         page_id = str(self._next_id)
         self.pages[page_id] = {
             "id": page_id, "title": title, "spaceId": SPACE_ID, "parentId": parent_id,
-            "parentType": "folder" if parent_id == self.folder["id"] else "page",
+            "parentType": "folder" if parent_id in self.folders else "page",
             "version": {"number": 1}, "body": body,
         }
         return self.pages[page_id]
@@ -180,10 +213,15 @@ class FakeConfluence:
                 query = parse_qs(url.query)
                 if url.path.endswith("/user/current"):
                     return self._reply({"accountId": "acct-1"})
-                if url.path == f"/api/v2/folders/{FOLDER_ID}":
-                    return self._reply(state.folder)
+                parts = url.path.split("/")
+                if url.path.startswith("/api/v2/folders/") and url.path.endswith("/direct-children"):
+                    return self._reply({"results": state.children_of(parts[4])})
                 if url.path.startswith("/api/v2/folders/"):
-                    return self._reply({"message": "not found"}, 404)
+                    folder = state.folders.get(parts[4])
+                    return self._reply(folder or {"message": "not found"}, 200 if folder else 404)
+                if url.path.startswith("/rest/api/content/"):
+                    content = state.folders.get(parts[4]) or state.pages.get(parts[4])
+                    return self._reply(content or {"message": "not found"}, 200 if content else 404)
                 if url.path == "/api/v2/pages":
                     title = query["title"][0]
                     space = query["space-id"][0]
@@ -196,9 +234,11 @@ class FakeConfluence:
                 if not self._begin():
                     return
                 body = self._body()
-                if any(p["title"] == body["title"] and p["spaceId"] == body["spaceId"]
-                       for p in state.pages.values()):
+                if any(c["title"] == body["title"] and c["spaceId"] == body["spaceId"]
+                       for c in [*state.pages.values(), *state.folders.values()]):
                     return self._reply({"message": "A page with this title already exists"}, 400)
+                if self.path == "/api/v2/folders":
+                    return self._reply(state.add_folder(body["title"], body.get("parentId")))
                 page = state.add_page(body["title"], body.get("parentId"),
                                       body["body"]["value"])
                 page["spaceId"] = body["spaceId"]
@@ -208,7 +248,16 @@ class FakeConfluence:
                 if not self._begin():
                     return
                 body = self._body()
-                page = state.pages[self.path.rsplit("/", 1)[1]]
+                parts = self.path.split("/")
+                if "move" in parts:   # /rest/api/content/{id}/move/append/{target}
+                    content = state.folders.get(parts[4]) or state.pages[parts[4]]
+                    state._reparent(content, parts[7])
+                    return self._reply(content)
+                if self.path.startswith("/rest/api/content/"):   # rename a folder
+                    folder = state.folders[parts[4]]
+                    folder.update(title=body["title"], version=body["version"])
+                    return self._reply(folder)
+                page = state.pages[parts[-1]]
                 page.update(title=body["title"], version=body["version"],
                             body=body["body"]["value"])
                 self._reply(page)

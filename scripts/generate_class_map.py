@@ -2,7 +2,7 @@
 """Generate a YAML map from class_uid to class caption from the OCSF schema.
 
 Usage:
-    python3 -m scripts.generate_class_map                       # write mappings/class_map.yaml
+    python3 -m scripts.generate_class_map                       # write mappings/class_mappings.yaml
     python3 -m scripts.generate_class_map -o -                  # write to stdout
     python3 -m scripts.generate_class_map path/to/schema.json
 """
@@ -14,10 +14,10 @@ from pathlib import Path
 
 import yaml
 
-from scripts.common import CLASS_MAP_PATH, SCHEMA_PATH
+from scripts.common import CLASS_MAPPINGS_PATH, SCHEMA_PATH
 
 DEFAULT_SCHEMA = SCHEMA_PATH
-DEFAULT_OUTPUT = CLASS_MAP_PATH
+DEFAULT_OUTPUT = CLASS_MAPPINGS_PATH
 
 
 def load_schema(path):

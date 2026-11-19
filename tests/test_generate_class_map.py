@@ -71,7 +71,7 @@ class TestCommandLine:
         return path
 
     def test_writes_the_output_file_with_a_generated_header(self, schema_file, tmp_path):
-        out = tmp_path / "out" / "class_map.yaml"
+        out = tmp_path / "out" / "class_mappings.yaml"
         out.parent.mkdir()
         result = self.run(str(schema_file), "-o", str(out))
         assert result.returncode == 0
@@ -97,11 +97,11 @@ class TestCommandLine:
 
 class TestCommittedClassMap:
     def test_matches_what_the_generator_produces_from_the_real_schema(self):
-        """Drift check: validate-and-compile-schema regenerates class_map.yaml, but
-        complex_mappings.py reads the committed copy at import time, so a stale file means the
+        """Drift check: validate-and-compile-schema regenerates class_mappings.yaml, but
+        mappers_and_selectors.py reads the committed copy at import time, so a stale file means the
         repo and the schema disagree.
         If this fails, run `python -m scripts.generate_class_map` and commit the result."""
         import scripts.common as pc
         generated = gcm.build_class_map(gcm.load_schema(pc.SCHEMA_PATH))
-        committed = yaml.safe_load(pc.CLASS_MAP_PATH.read_text())["classes"]
+        committed = yaml.safe_load(pc.CLASS_MAPPINGS_PATH.read_text())["classes"]
         assert committed == generated
