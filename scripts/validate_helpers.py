@@ -96,10 +96,6 @@ def _describe(error) -> str:
         schema_props = error.schema.get("properties", {})
         unknown = sorted(k for k in error.instance if k not in schema_props)
         return f"unknown key(s) {', '.join(repr(k) for k in unknown)}"
-    if error.validator == "not" and "required" in error.validator_value.get("not", error.validator_value):
-        # `not: {required: [k]}` forbids key k here, e.g. join on a list-item swords path.
-        forbidden = error.validator_value.get("required", [])
-        return f"{', '.join(repr(k) for k in forbidden)} is not allowed when the swords path is a list item"
     if error.validator == "pattern":
         # The raw regex is unreadable; the schema's description says what the value should be.
         return f"{error.instance!r} is not valid: expected {error.schema.get('description', 'a different format')}"

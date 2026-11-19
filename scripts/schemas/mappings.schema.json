@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "mappings.schema.json",
-  "title": "mappings.yaml",
+  "title": "swords_mappings.yaml",
   "description": "The global POLEARMS to SWORDS mappings.",
   "type": "object",
   "required": ["mappings"],

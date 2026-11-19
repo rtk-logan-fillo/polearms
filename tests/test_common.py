@@ -54,7 +54,7 @@ class TestMapping:
         assert mapping.polearms == ["a", "b"]
 
     def test_constructor_and_from_dict_agree(self):
-        raw = {"polearms": "a[x].b", "swords": "s", "labels": {"x": "k"}, "mapper": {"fn": "map_x"}}
+        raw = {"polearms": "a[x].b", "swords": "s", "selectors": {"x": {"label": "k"}}, "mapper": {"fn": "map_x"}}
         assert Mapping(**raw) == Mapping.from_dict(raw)
 
     def test_from_dict_accepts_a_single_string_path(self):
@@ -65,7 +65,7 @@ class TestMapping:
 
     def test_from_dict_defaults(self):
         m = pc.Mapping.from_dict({})
-        assert (m.polearms, m.swords, m.labels, m.mapper) == ([], "", {}, None)
+        assert (m.polearms, m.swords, m.labels, m.mapper, m.join, m.first) == ([], "", {}, None, None, False)
 
     def test_has_polearms(self):
         assert Mapping(polearms="a", swords="s").has_polearms()
@@ -84,23 +84,72 @@ class TestMapping:
         assert Mapping(polearms="a", swords="t[].x").is_list_item()
         assert not Mapping(polearms="a", swords="t.x").is_list_item()
 
-    def test_label_keys_cover_polearms_and_swords_but_ignore_bare_brackets(self):
-        m = Mapping(polearms=["a[x].b", "c[]"], swords="t[y].z")
+    def test_label_keys_cover_polearms_and_swords_but_ignore_bare_brackets_and_indexes(self):
+        m = Mapping(polearms=["a[x].b", "c[]", "d[0].e", "f[12]"], swords="t[y].z")
         assert m.label_keys() == {"x", "y"}
 
+    def test_labels_come_from_the_selectors(self):
+        m = Mapping(polearms="a[x].b", swords="s", selectors={"x": {"label": "k==1", "fn": "select_a"}})
+        assert m.labels == {"x": "k==1"}
+        assert m.display_name() == "a[k==1].b"
+
+    def test_selector_fn(self):
+        m = Mapping(polearms="a[x].b[y]", swords="s", selectors={"x": {"label": "k", "fn": "select_a"}, "y": {"label": "k"}})
+        assert (m.selector_fn("x"), m.selector_fn("y"), m.selector_fn("zzz")) == ("select_a", "", "")
+
+    @pytest.mark.parametrize("path,selectors,expected", [
+        ("a[].b", {}, True),
+        ("a[0].b", {}, False),
+        ("a.b", {}, False),
+        ("a[x].b", {"x": {"label": "k", "fn": "select_a"}}, True),
+        ("a[x].b", {"x": {"label": "k"}}, False),
+        ("a[0].b[y]", {"y": {"label": "k", "fn": "select_a"}}, True),
+    ])
+    def test_produces_list(self, path, selectors, expected):
+        assert Mapping(polearms=path, swords="s", selectors=selectors).produces_list() is expected
+
+    def test_a_selector_that_returns_one_item_does_not_give_a_list(self):
+        m = Mapping(polearms="a[x].b", swords="s", selectors={"x": {"label": "k", "fn": "select_one"}})
+        assert m.produces_list() is True
+        assert m.produces_list(frozenset({"select_list"})) is False
+        assert m.produces_list(frozenset({"select_one"})) is True
+
+    def test_several_paths_give_a_list_only_if_each_does(self):
+        assert Mapping(polearms=["a[].x", "b[].y"], swords="s").produces_list() is True
+        assert Mapping(polearms=["a[].x", "b[0].y"], swords="s").produces_list() is False
+
+    def test_logic_key_tells_mappings_with_different_selectors_apart(self):
+        a = Mapping(polearms="f[x].v", swords="s1", selectors={"x": {"label": "1", "fn": "select_first_md5"}})
+        b = Mapping(polearms="f[x].v", swords="s2", selectors={"x": {"label": "2", "fn": "select_first_sha1"}})
+        assert a.logic_key() != b.logic_key()
+        assert Mapping(polearms="a", swords="s", mapper={"fn": "map_x"}).logic_key() == "map_x"
+        assert Mapping(polearms="a", swords="s").logic_key() == ""
+
+    def test_is_index(self):
+        assert pc.is_index("0") and pc.is_index("12")
+        assert not pc.is_index("") and not pc.is_index("x") and not pc.is_index("-1") and not pc.is_index("1a")
+
     def test_display_name_joins_displayed_paths(self):
-        m = Mapping(polearms=["a[x].b", "c"], swords="s", labels={"x": "i==0"})
+        m = Mapping(polearms=["a[x].b", "c"], swords="s", selectors={"x": {"label": "i==0"}})
         assert m.display_name() == "a[i==0].b, c"
 
     def test_display_swords_and_swords_field_path(self):
-        m = Mapping(polearms="a", swords="t[y].z", labels={"y": "k"})
+        m = Mapping(polearms="a", swords="t[y].z", selectors={"y": {"label": "k"}})
         assert m.display_swords() == "t[k].z"
         assert m.swords_field_path() == "t.z"
 
     def test_mapper_fn_and_join_separator(self):
-        m = Mapping(polearms="a", swords="s", mapper={"fn": "map_x", "join": ","})
+        m = Mapping(polearms="a", swords="s", mapper={"fn": "map_x"}, join=",")
         assert m.mapper_fn() == "map_x"
         assert m.join_separator() == ","
+
+    def test_first_defaults_to_false_and_is_read_from_the_mapping(self):
+        assert Mapping(polearms="a[]", swords="s").first is False
+        assert Mapping.from_dict({"polearms": "a[]", "swords": "s", "first": True}).first is True
+
+    def test_join_comes_from_the_mapping_not_the_mapper(self):
+        assert Mapping(polearms="a[]", swords="s", join=",").join_separator() == ","
+        assert Mapping.from_dict({"polearms": "a[]", "swords": "s", "join": ","}).join == ","
 
     def test_mapper_accessors_without_a_mapper(self):
         m = Mapping(polearms="a", swords="s")

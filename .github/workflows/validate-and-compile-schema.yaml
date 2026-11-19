@@ -4,11 +4,13 @@ name: Validate and compile schema
 #
 #   1. validates schema/schema_definition.yaml
 #   2. compiles schema/schema.json from the OCSF and Arctic Wolf extension versions the definition
-#      names, and regenerates mappings/class_map.yaml from it
+#      names, and regenerates mappings/class_mappings.yaml from it
 #   3. commits both to the pull request's branch, if they changed
 #
-# The commit is pushed with the workflow's own token, which GitHub does not use to start further
-# workflow runs.
+# The commit is pushed with the SCHEMA_COMMIT_TOKEN secret, not the workflow's own GITHUB_TOKEN.
+# A push made with GITHUB_TOKEN still creates pull_request runs, but holds them until someone
+# approves them. A push made with a personal access token (or GitHub App token) starts the pull
+# request's checks normally. The token needs write access to this repository's contents.
 on:
   pull_request:
     branches: [main]
@@ -38,6 +40,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           ref: ${{ github.head_ref }}
+          token: ${{ secrets.SCHEMA_COMMIT_TOKEN }}
 
       - name: Set up Python (for the repo's scripts)
         uses: actions/setup-python@v5
@@ -53,7 +56,12 @@ jobs:
       - name: Validate the schema definition
         run: .venv/bin/python -m scripts.validate_schema_definition
 
+      - name: Check whether schema.json is out of date
+        id: status
+        run: .venv/bin/python -m scripts.compile_status >> "$GITHUB_OUTPUT"
+
       - name: Read versions from schema_definition.yaml
+        if: steps.status.outputs.needs_compile == 'true'
         id: versions
         run: |
           .venv/bin/python - <<'EOF' >> "$GITHUB_OUTPUT"
@@ -68,6 +76,7 @@ jobs:
 
       # Both repositories tag releases by bare version (1.8.0, 0.0.0), without a "v" prefix.
       - name: Check out the OCSF schema
+        if: steps.status.outputs.needs_compile == 'true'
         uses: actions/checkout@v4
         with:
           repository: ${{ env.OCSF_REPO }}
@@ -77,6 +86,7 @@ jobs:
       # The compiler walks the --extensions-path directory for extension.json files, so the
       # extension must sit inside a directory of its own rather than be passed directly.
       - name: Check out the Arctic Wolf extension
+        if: steps.status.outputs.needs_compile == 'true'
         uses: actions/checkout@v4
         with:
           repository: ${{ env.EXTENSION_REPO }}
@@ -84,6 +94,7 @@ jobs:
           path: build/extensions/arcticwolf
 
       - name: Check the extension's own version matches
+        if: steps.status.outputs.needs_compile == 'true'
         run: |
           actual="$(.venv/bin/python -c "import json; print(json.load(open('build/extensions/arcticwolf/extension.json')).get('version', ''))")"
           expected="${{ steps.versions.outputs.extension }}"
@@ -94,17 +105,20 @@ jobs:
 
       # ocsf-schema-compiler imports compression.zstd, which exists only in Python 3.14 and later.
       - name: Set up Python 3.14 (for the compiler)
+        if: steps.status.outputs.needs_compile == 'true'
         uses: actions/setup-python@v5
         with:
           python-version: "3.14"
 
       - name: Install the schema compiler
+        if: steps.status.outputs.needs_compile == 'true'
         run: |
           python -m venv build/.compiler-venv
           build/.compiler-venv/bin/pip install --quiet ocsf-schema-compiler
           build/.compiler-venv/bin/ocsf-schema-compiler --version
 
       - name: Compile the schema
+        if: steps.status.outputs.needs_compile == 'true'
         run: |
           build/.compiler-venv/bin/ocsf-schema-compiler build/ocsf-schema \
             --extensions-path build/extensions > build/schema.json
@@ -112,6 +126,7 @@ jobs:
           ls -l build/schema.json
 
       - name: Check the compiled versions match the definition
+        if: steps.status.outputs.needs_compile == 'true'
         run: |
           .venv/bin/python - <<'EOF'
           import json, sys
@@ -126,21 +141,23 @@ jobs:
 
       # The class map is derived from schema.json, so it is regenerated whenever the schema is.
       - name: Generate the class map
+        if: steps.status.outputs.needs_compile == 'true'
         run: |
           cp build/schema.json schema/schema.json
           .venv/bin/python -m scripts.generate_class_map
 
       - name: Commit the compiled schema and class map
+        if: steps.status.outputs.needs_compile == 'true'
         env:
           # Branch names may contain shell metacharacters, so pass it as data, not into the script text.
           HEAD_REF: ${{ github.head_ref }}
         run: |
-          if git diff --quiet -- schema/schema.json mappings/class_map.yaml; then
-            echo "schema/schema.json and mappings/class_map.yaml are already up to date; nothing to commit."
+          if git diff --quiet -- schema/schema.json mappings/class_mappings.yaml; then
+            echo "schema/schema.json and mappings/class_mappings.yaml are already up to date; nothing to commit."
             exit 0
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add schema/schema.json mappings/class_map.yaml
+          git add schema/schema.json mappings/class_mappings.yaml
           git commit -m "Compile schema: OCSF ${{ steps.versions.outputs.ocsf }} + Arctic Wolf extension ${{ steps.versions.outputs.extension }}"
           git push origin "HEAD:$HEAD_REF"

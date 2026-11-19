@@ -91,9 +91,9 @@ class TestValidateAgainstSchema:
         assert issue.target == "m.yaml" and "is not of type 'object'" in issue.message
 
     def test_locations_use_dots_for_keys_and_brackets_for_indexes(self):
-        doc = {"mappings": [{"polearms": "a", "swords": "s", "labels": {"x": 5}}]}
+        doc = {"mappings": [{"polearms": "a", "swords": "s", "selectors": {"x": {"label": 5}}}]}
         (issue,) = v.validate_against_schema(doc, "mappings.schema.json", "t")
-        assert issue.target == "t:mappings[0].labels.x"
+        assert issue.target == "t:mappings[0].selectors.x.label"
 
     def test_one_issue_per_violation_in_document_order(self):
         doc = {"mappings": [{"polearms": "a"}, {"swords": "s"}, {"polearms": "b", "swords": "s", "z": 1}]}

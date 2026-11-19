@@ -6,7 +6,7 @@ import yaml
 from scripts import generate_confluence_pages as gcp
 import scripts.common as pc
 from scripts.common import ClassConfig, Mapping
-from tests.conftest import FOLDER_ID, SPACE_ID
+from tests.conftest import FOLDER_ID, PREVIOUS_FOLDER_ID, SPACE_ID
 
 
 def config(**kw):
@@ -36,6 +36,9 @@ class TestRow:
 
     def test_shown_field_wraps_a_join(self):
         assert gcp.Row(polearms_field="a[k].b", join_sep=",").shown_field() == 'join(a[k].b, ",")'
+
+    def test_shown_field_wraps_a_first(self):
+        assert gcp.Row(polearms_field="a[].b", first=True).shown_field() == "first(a[].b)"
 
     def test_an_empty_separator_is_still_a_join(self):
         assert gcp.Row(polearms_field="a", join_sep="").shown_field() == 'join(a, "")'
@@ -130,6 +133,12 @@ class TestBuildMappingRows:
         (row,) = rows_for(mini_schema, [Mapping(polearms="name", swords="widget-name", mapper={"fn": "map_x"})])
         assert row.mapping == "<strong>Complex</strong>"
 
+    def test_a_bracketed_path_with_no_mapper_is_complex(self, mini_schema):
+        mini_schema.classes["widget"]["attributes"]["tags"]["is_array"] = True
+        (row,) = rows_for(mini_schema, [Mapping(polearms="tags[]", swords="s", join=",")])
+        assert row.mapping == "<strong>Complex</strong>"
+        assert row.shown_field() == 'join(tags[], ",")'
+
     def test_many_to_one_is_labelled_and_produces_a_row_per_polearms_field(self, mini_schema):
         rows = rows_for(mini_schema, [Mapping(polearms=["name", "tags"], swords="s", mapper={"fn": "map_x"})])
         assert [r.polearms_field for r in rows] == ["name", "tags"]
@@ -194,7 +203,7 @@ class TestBuildMappingRows:
         assert {r.swords: r.swords_type for r in rows} == {"a": "int", "b": "ip[]"}
 
     def test_swords_type_looks_up_the_path_without_its_labels(self, mini_schema):
-        m = Mapping(polearms="owner[x].email", swords="t[y].z", labels={"x": "k", "y": "k"}, mapper={"fn": "map_x"})
+        m = Mapping(polearms="owner[x].email", swords="t[y].z", selectors={"x": {"label": "k"}, "y": {"label": "k"}}, mapper={"fn": "map_x"})
         (row,) = rows_for(mini_schema, [m], swords={"t.z": {"datatype": "long", "is_list": False}})
         assert row.swords_type == "long"
 
@@ -207,14 +216,19 @@ class TestBuildMappingRows:
         (row,) = rows_for(mini_schema, [Mapping(polearms="name", swords="other")])
         assert row.swords_type == ""
 
+    def test_selector_labels_are_expanded_in_the_displayed_paths(self, mini_schema):
+        m = Mapping(polearms="owner[x].email", swords="s", selectors={"x": {"label": "k==1", "fn": "select_a"}})
+        (row,) = rows_for(mini_schema, [m])
+        assert row.polearms_field == "owner[k==1].email"
+
     def test_labels_are_expanded_in_the_displayed_paths(self, mini_schema):
-        m = Mapping(polearms="owner[x].email", swords="t[y].z", labels={"x": "i==0", "y": "k"}, mapper={"fn": "map_x"})
+        m = Mapping(polearms="owner[x].email", swords="t[y].z", selectors={"x": {"label": "i==0"}, "y": {"label": "k"}}, mapper={"fn": "map_x"})
         (row,) = rows_for(mini_schema, [m])
         assert row.polearms_field == "owner[i==0].email"
         assert row.swords == "t[k].z"
 
     def test_join_separator_is_carried_through(self, mini_schema):
-        (row,) = rows_for(mini_schema, [Mapping(polearms="tags", swords="s", mapper={"fn": "map_x", "join": ","})])
+        (row,) = rows_for(mini_schema, [Mapping(polearms="tags", swords="s", join=",")])
         assert row.shown_field() == 'join(tags, ",")'
 
     def test_an_override_replaces_the_global_mapping_for_the_same_swords_field(self, mini_schema):
@@ -236,7 +250,7 @@ class TestBuildMappingRows:
         assert by_field["tags"].caption == "Tags"
 
     def test_an_essential_field_covered_by_a_labelled_mapping_is_not_duplicated(self, mini_schema):
-        m = Mapping(polearms="owner[x].email", swords="s", labels={"x": "k"}, mapper={"fn": "map_x"})
+        m = Mapping(polearms="owner[x].email", swords="s", selectors={"x": {"label": "k"}}, mapper={"fn": "map_x"})
         rows = rows_for(mini_schema, [m], essentials=["owner[].email"])
         assert len(rows) == 1
 
@@ -317,7 +331,7 @@ class TestBuildPages:
 
     def test_hierarchy_is_version_then_class_below_the_base_folder(self, mini_schema):
         for page in self.build(mini_schema, config()):
-            assert page.hierarchy == ["3.1.4", "Widget 3.1.4"]
+            assert page.hierarchy == ["3.1.4 (latest)", "Widget 3.1.4"]
 
     def test_class_description_is_prepended_as_a_paragraph(self, mini_schema):
         mappings, _ = self.build(mini_schema, config())
@@ -429,10 +443,12 @@ class TestPublishPages:
     def test_creates_the_hierarchy_and_both_pages(self, confluence, mini_schema):
         gcp.publish_pages(sample_pages(mini_schema), client_for(confluence))
         assert confluence.titles() == sorted([
-            "1.2.3", "Widget 1.2.3",
+            "1.2.3 (latest)", "Widget 1.2.3",
             "Widget 1.2.3 - Mappings", "Widget 1.2.3 - Essential Fields"])
-        assert confluence.parent_title("1.2.3") == "POLEARMS"
-        assert confluence.parent_title("Widget 1.2.3") == "1.2.3"
+        assert confluence.type_of("1.2.3 (latest)") == "folder"
+        assert confluence.type_of("Widget 1.2.3") == "page"
+        assert confluence.parent_title("1.2.3 (latest)") == "POLEARMS"
+        assert confluence.parent_title("Widget 1.2.3") == "1.2.3 (latest)"
         assert confluence.parent_title("Widget 1.2.3 - Mappings") == "Widget 1.2.3"
         assert confluence.parent_title("Widget 1.2.3 - Essential Fields") == "Widget 1.2.3"
 
@@ -455,8 +471,54 @@ class TestPublishPages:
         client = client_for(confluence)
         gcp.publish_pages(sample_pages(mini_schema, "1.0.0"), client)
         gcp.publish_pages(sample_pages(mini_schema, "2.0.0"), client)
-        assert {"1.0.0", "2.0.0", "Widget 1.0.0 - Mappings", "Widget 2.0.0 - Mappings"} <= set(confluence.titles())
-        assert confluence.parent_title("1.0.0") == confluence.parent_title("2.0.0") == "POLEARMS"
+        assert {"1.0.0", "2.0.0 (latest)", "Widget 1.0.0 - Mappings", "Widget 2.0.0 - Mappings"} <= set(confluence.titles())
+
+    def test_the_previous_latest_is_renamed_and_moved_to_previous_versions(self, confluence, mini_schema):
+        client = client_for(confluence)
+        gcp.publish_pages(sample_pages(mini_schema, "1.0.0"), client)
+        old_id = next(i for i, f in confluence.folders.items() if f["title"] == "1.0.0 (latest)")
+        gcp.publish_pages(sample_pages(mini_schema, "2.0.0"), client)
+        assert confluence.folders[old_id]["title"] == "1.0.0"
+        assert confluence.parent_title("1.0.0") == "Previous Versions"
+        assert confluence.parent_title("2.0.0 (latest)") == "POLEARMS"
+        # its class pages travel with it
+        assert confluence.parent_title("Widget 1.0.0") == "1.0.0"
+        assert confluence.parent_title("Widget 2.0.0") == "2.0.0 (latest)"
+        assert "1.0.0 (latest)" not in confluence.titles()
+
+    def test_republishing_the_latest_version_archives_nothing(self, confluence, mini_schema):
+        client = client_for(confluence)
+        gcp.publish_pages(sample_pages(mini_schema), client)
+        gcp.publish_pages(sample_pages(mini_schema), client)
+        assert confluence.children_of(PREVIOUS_FOLDER_ID) == []
+        assert not any(m == "PUT" and "/move/" in path for m, path in confluence.requests)
+
+    def test_every_older_latest_folder_is_archived(self, confluence, mini_schema):
+        confluence.add_folder("0.8.0 (latest)")
+        confluence.add_folder("0.9.0 (latest)")
+        gcp.publish_pages(sample_pages(mini_schema), client_for(confluence))
+        assert sorted(c["title"] for c in confluence.children_of(PREVIOUS_FOLDER_ID)) == ["0.8.0", "0.9.0"]
+
+    def test_other_content_under_polearms_is_left_alone(self, confluence, mini_schema):
+        confluence.add_folder("Notes")
+        confluence.add_page("0.5.0 (latest)", parent_id=FOLDER_ID)   # a page, not a version folder
+        gcp.publish_pages(sample_pages(mini_schema), client_for(confluence))
+        assert confluence.parent_title("Notes") == "POLEARMS"
+        assert confluence.parent_title("0.5.0 (latest)") == "POLEARMS"
+
+    def test_archiving_refuses_to_clobber_an_existing_previous_version(self, confluence, mini_schema):
+        stale = confluence.add_folder("0.9.0 (latest)")
+        confluence.add_folder("0.9.0", parent_id=PREVIOUS_FOLDER_ID)
+        with pytest.raises(SystemExit, match="already exists in Previous Versions"):
+            gcp.publish_pages(sample_pages(mini_schema), client_for(confluence))
+        assert confluence.folders[stale["id"]]["title"] == "0.9.0 (latest)"
+        assert confluence.pages == {}
+
+    def test_a_previous_versions_folder_with_the_wrong_title_aborts_before_writing(self, confluence, mini_schema):
+        confluence.previous["title"] = "Something else"
+        with pytest.raises(SystemExit, match="expected 'Previous Versions'"):
+            gcp.publish_pages(sample_pages(mini_schema), client_for(confluence))
+        assert confluence.pages == {}
 
     def test_prints_progress(self, confluence, mini_schema, capsys):
         gcp.publish_pages(sample_pages(mini_schema), client_for(confluence))
@@ -504,7 +566,7 @@ class TestPublishPages:
 @pytest.fixture
 def project(fake_project, confluence, monkeypatch):
     for name, path in {
-        "SCHEMA_PATH": fake_project.schema, "MAPPINGS_PATH": fake_project.mappings,
+        "SCHEMA_PATH": fake_project.schema, "SWORDS_MAPPINGS_PATH": fake_project.mappings,
         "VERSION_PATH": fake_project.version, "CONFIG_DIR": fake_project.config_dir,
     }.items():
         monkeypatch.setattr(gcp, name, path)
@@ -540,7 +602,7 @@ class TestMain:
     def test_a_dev_version_gets_its_own_page_tree(self, project, confluence, monkeypatch):
         project.version.write_text('{"version": "1.10.0-dev"}')
         run_main(monkeypatch, "--confluence-user", "u", "--confluence-token", "t")
-        assert "1.10.0-dev" in confluence.titles()
+        assert "1.10.0-dev (latest)" in confluence.titles()
         assert "Widget 1.10.0-dev - Mappings" in confluence.titles()
 
     @pytest.mark.parametrize("args", [

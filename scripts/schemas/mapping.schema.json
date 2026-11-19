@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "mapping.schema.json",
   "title": "Mapping",
-  "description": "One POLEARMS to SWORDS mapping. Shared by mappings.yaml and a class config's override_mappings.",
+  "description": "One POLEARMS to SWORDS mapping. Shared by swords_mappings.yaml and a class config's override_mappings.",
   "type": "object",
   "required": [
     "polearms",
@@ -11,7 +11,7 @@
   "additionalProperties": false,
   "properties": {
     "polearms": {
-      "description": "One POLEARMS path, or several for a many-to-one mapping whose mapper combines them.",
+      "description": "One POLEARMS path, or several for a many-to-one mapping whose mapper combines them. Without a mapper, [] takes every non-null item of an array and [N] takes item N.",
       "type": [
         "string",
         "array"
@@ -28,81 +28,41 @@
       "type": "string",
       "minLength": 1
     },
-    "labels": {
-      "description": "A condition for each [key] used in the polearms or swords paths.",
+    "selectors": {
+      "description": "One entry for each [key] bracket in the polearms or swords paths. A selector gets the array at its bracket and returns the items to keep; the label says in words which items those are.",
       "type": "object",
       "additionalProperties": {
-        "type": "string",
-        "minLength": 1
+        "type": "object",
+        "required": [
+          "label"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "label": {
+            "description": "The condition in words, like algorithm_id==1. The Confluence page puts it in the path.",
+            "type": "string",
+            "minLength": 1
+          },
+          "fn": {
+            "description": "Name of a selector function in mappers_and_selectors.py. Without one the selector only documents the bracket, and the mapping needs a mapper that does the picking.",
+            "type": "string",
+            "minLength": 1
+          }
+        }
       }
     },
     "mapper": {
       "$ref": "#/$defs/mapper"
+    },
+    "join": {
+      "description": "Join the mapped list of values into one string with this separator.",
+      "type": "string"
+    },
+    "first": {
+      "description": "Take only the first non-null item of a [] path, so the result is one value.",
+      "type": "boolean"
     }
   },
-  "allOf": [
-    {
-      "description": "A many-to-one mapping needs a mapper to combine its inputs.",
-      "if": {
-        "properties": {
-          "polearms": {
-            "type": "array",
-            "minItems": 2
-          }
-        },
-        "required": [
-          "polearms"
-        ]
-      },
-      "then": {
-        "required": [
-          "mapper"
-        ]
-      }
-    },
-    {
-      "description": "A swords path into a list item ([] segment) needs a mapper.",
-      "if": {
-        "properties": {
-          "swords": {
-            "pattern": "\\["
-          }
-        },
-        "required": [
-          "swords"
-        ]
-      },
-      "then": {
-        "required": [
-          "mapper"
-        ]
-      }
-    },
-    {
-      "description": "join produces a string, so it cannot target a list item.",
-      "if": {
-        "properties": {
-          "swords": {
-            "pattern": "\\["
-          }
-        },
-        "required": [
-          "swords"
-        ]
-      },
-      "then": {
-        "properties": {
-          "mapper": {
-            "not": {
-              "required": [
-                "join"
-              ]
-            }
-          }
-        }
-      }
-    }
-  ],
   "$defs": {
     "mapper": {
       "type": "object",
@@ -112,7 +72,7 @@
       "additionalProperties": false,
       "properties": {
         "fn": {
-          "description": "Name of a function in complex_mappings.py.",
+          "description": "Name of a function in mappers_and_selectors.py.",
           "type": "string",
           "minLength": 1
         },
@@ -123,10 +83,6 @@
             "type": "string",
             "minLength": 1
           }
-        },
-        "join": {
-          "description": "Join the function's list result into one string with this separator.",
-          "type": "string"
         }
       }
     }
